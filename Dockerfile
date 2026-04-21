@@ -6,7 +6,7 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# (Future) Install BMAD dependencies here. For now, we only need a runner script.
+# (Future) Install BMAD dependencies here. For now, we only need runner scripts.
 COPY docker/runner /app/runner
 
 ENV BMAD_COMMAND="node /app/runner/mock-bmad.js"

@@ -29,6 +29,27 @@ This repo contains:
   - BYOK key used in-memory for that run only
   - API keys are masked in backend logs
 
+## Agent pipeline (MVP)
+
+This repo also includes a **local-first agent pipeline** that runs a multi-step flow:
+
+Idea → planner/decomposer/builder → Docker execution → static preview → reviewer → iterate
+
+The pipeline uses the same managed/BYOK key rules and streams logs via SSE.
+
+### Pipeline API
+- `POST /api/pipeline/run`
+- `GET /api/pipeline/run/:runId/stream` (SSE)
+- `GET /api/pipeline/run/:runId/result`
+- `POST /api/pipeline/iterate`
+
+### Preview
+Pipeline runs produce a **static Next.js export** that is served locally from:
+
+- `GET /preview/:runId/:version/`
+
+In the UI, this shows up as an iframe preview.
+
 ## Managed mode vs BYOK mode
 
 ### Managed mode
@@ -91,6 +112,9 @@ Open:
 ### Mock BMAD runner
 Right now, the runner is a realistic mock at:
 - `docker/runner/mock-bmad.js`
+
+For the pipeline static preview, the runner is:
+- `docker/runner/mock-bmad-static-nextjs.js`
 
 Swap to real BMAD later by changing `.env`:
 ```bash

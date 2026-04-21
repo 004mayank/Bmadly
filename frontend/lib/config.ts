@@ -17,3 +17,9 @@ export const PROVIDERS = [
     models: ["gemini-1.5-flash", "gemini-1.5-pro"]
   }
 ] as const;
+
+export const DEFAULT_PIPELINE_MODELS: Record<string, string> = {
+  openai: "gpt-4o-mini",
+  anthropic: "claude-3-5-sonnet",
+  gemini: "gemini-1.5-flash"
+};

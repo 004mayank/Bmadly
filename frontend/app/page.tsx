@@ -18,9 +18,13 @@ export default function HomePage() {
   const [model, setModel] = useState("gpt-4o-mini");
   const [useOwnKey, setUseOwnKey] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [idea, setIdea] = useState("");
 
   const [logs, setLogs] = useState<string[]>([]);
   const [output, setOutput] = useState<string>("");
+  const [planJson, setPlanJson] = useState<string>("");
+  const [reviewText, setReviewText] = useState<string>("");
+  const [previewUrl, setPreviewUrl] = useState<string>("");
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState<number>(0);
@@ -49,6 +53,9 @@ export default function HomePage() {
   function clearPanels() {
     setLogs([]);
     setOutput("");
+    setPlanJson("");
+    setReviewText("");
+    setPreviewUrl("");
     setRunState({ status: "idle" });
     setStartedAt(null);
     setElapsedSec(0);
@@ -57,11 +64,19 @@ export default function HomePage() {
   async function startRun() {
     setOutput("");
     setLogs([]);
+    setPlanJson("");
+    setReviewText("");
+    setPreviewUrl("");
     setStartedAt(Date.now());
     setElapsedSec(0);
 
     if (!provider || !model) {
       setRunState({ status: "error", message: "Select provider and model." });
+      return;
+    }
+
+    if (!idea.trim()) {
+      setRunState({ status: "error", message: "Enter a product idea." });
       return;
     }
 
@@ -71,10 +86,11 @@ export default function HomePage() {
     }
 
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/run`, {
+      const resp = await fetch(`${API_BASE_URL}/api/pipeline/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          idea,
           provider,
           model,
           useOwnKey,
@@ -98,7 +114,7 @@ export default function HomePage() {
   }
 
   async function streamLogs(runId: string) {
-    const es = new EventSource(`${API_BASE_URL}/api/run/${runId}/stream`);
+    const es = new EventSource(`${API_BASE_URL}/api/pipeline/run/${runId}/stream`);
 
     es.addEventListener("log", (ev) => {
       const msg = JSON.parse((ev as MessageEvent).data);
@@ -114,9 +130,13 @@ export default function HomePage() {
       setStartedAt(null);
 
       // fetch result
-      const r = await fetch(`${API_BASE_URL}/api/run/${runId}/result`);
+      const r = await fetch(`${API_BASE_URL}/api/pipeline/run/${runId}/result`);
       const j = await r.json().catch(() => null);
-      setOutput(JSON.stringify(j?.output ?? null, null, 2));
+      const result = j?.result;
+      if (result?.plan) setPlanJson(JSON.stringify(result.plan, null, 2));
+      if (result?.review) setReviewText(JSON.stringify(result.review, null, 2));
+      if (result?.previewUrl) setPreviewUrl(`${API_BASE_URL}${result.previewUrl}`);
+      setOutput(JSON.stringify(result ?? null, null, 2));
     });
 
     es.onerror = () => {
@@ -210,6 +230,16 @@ export default function HomePage() {
             </div>
           </div>
 
+          <label className="label">Product idea</label>
+          <textarea
+            className="input"
+            value={idea}
+            disabled={isRunning}
+            onChange={(e) => setIdea(e.target.value)}
+            placeholder="Describe the product you want to generate…"
+            style={{ minHeight: 92, resize: "vertical" }}
+          />
+
           <div className="row" style={{ marginTop: 12, justifyContent: "space-between" }}>
             <label className="pill" style={{ cursor: isRunning ? "not-allowed" : "pointer" }}>
               <input
@@ -250,10 +280,116 @@ export default function HomePage() {
               {runState.finalStatus.toUpperCase()}
             </div>
           )}
+
+          {runState.status !== "running" && currentRunId && (
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                Iterate (scoped)
+              </div>
+              <div className="row" style={{ flexWrap: "wrap" }}>
+                <button
+                  className="btnSecondary"
+                  type="button"
+                  onClick={async () => {
+                    setLogs([]);
+                    setStartedAt(Date.now());
+                    setElapsedSec(0);
+                    setRunState({ status: "running", runId: currentRunId });
+                    await fetch(`${API_BASE_URL}/api/pipeline/iterate`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        runId: currentRunId,
+                        intent: "improve_ui",
+                        provider,
+                        model,
+                        useOwnKey,
+                        apiKey: useOwnKey ? apiKey : undefined
+                      })
+                    });
+                    streamLogs(currentRunId);
+                  }}
+                >
+                  Improve UI
+                </button>
+                <button
+                  className="btnSecondary"
+                  type="button"
+                  onClick={async () => {
+                    setLogs([]);
+                    setStartedAt(Date.now());
+                    setElapsedSec(0);
+                    setRunState({ status: "running", runId: currentRunId });
+                    await fetch(`${API_BASE_URL}/api/pipeline/iterate`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        runId: currentRunId,
+                        intent: "fix_bugs",
+                        provider,
+                        model,
+                        useOwnKey,
+                        apiKey: useOwnKey ? apiKey : undefined
+                      })
+                    });
+                    streamLogs(currentRunId);
+                  }}
+                >
+                  Fix bugs
+                </button>
+                <button
+                  className="btnSecondary"
+                  type="button"
+                  onClick={async () => {
+                    const note = prompt("Feature to add?") || "";
+                    if (!note.trim()) return;
+                    setLogs([]);
+                    setStartedAt(Date.now());
+                    setElapsedSec(0);
+                    setRunState({ status: "running", runId: currentRunId });
+                    await fetch(`${API_BASE_URL}/api/pipeline/iterate`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        runId: currentRunId,
+                        intent: "add_feature",
+                        note,
+                        provider,
+                        model,
+                        useOwnKey,
+                        apiKey: useOwnKey ? apiKey : undefined
+                      })
+                    });
+                    streamLogs(currentRunId);
+                  }}
+                >
+                  Add feature
+                </button>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">Plan</div>
+                {planJson && (
+                  <button
+                    className="btnSecondary"
+                    onClick={() => navigator.clipboard.writeText(planJson).catch(() => {})}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
+              <div className="output">
+                {planJson ? planJson : <span className="muted">(plan will appear here)</span>}
+              </div>
+            </div>
+
             <div>
               <div className="terminalHeader">
                 <div className="muted">Logs</div>
@@ -287,7 +423,44 @@ export default function HomePage() {
 
             <div>
               <div className="sectionTitle">
-                <div className="sectionTitleText">Output</div>
+                <div className="sectionTitleText">Preview</div>
+              </div>
+              <div className="output" style={{ padding: 0, overflow: "hidden" }}>
+                {previewUrl ? (
+                  <iframe
+                    src={previewUrl}
+                    style={{ width: "100%", height: 320, border: 0, borderRadius: 16 }}
+                    title="preview"
+                  />
+                ) : (
+                  <div style={{ padding: 14 }} className="muted">
+                    (preview will appear here)
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">Review</div>
+                {reviewText && (
+                  <button
+                    className="btnSecondary"
+                    onClick={() => navigator.clipboard.writeText(reviewText).catch(() => {})}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
+              <div className="output">
+                {reviewText ? reviewText : <span className="muted">(review will appear here)</span>}
+              </div>
+            </div>
+
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">Raw result</div>
                 {output && (
                   <button
                     className="btnSecondary"

@@ -1,6 +1,7 @@
-import express from "express";
 import cors from "cors";
 import { runsRouter } from "./routes/runs.js";
+import { pipelineRouter } from "./routes/pipeline.js";
+import express from "express";
 
 const PORT = Number(process.env.PORT || 4000);
 
@@ -22,6 +23,10 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api", runsRouter);
+app.use("/api", pipelineRouter);
+
+// Serve static previews (local-only MVP)
+app.use("/preview", express.static(".bmadly-previews"));
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
