@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { RunsStore } from "../store/runsStore.js";
+import { maskKey } from "../utils/maskKey.js";
 
 type Provider = "openai" | "anthropic" | "gemini";
 
@@ -16,6 +17,16 @@ function envKeyName(provider: Provider) {
   if (provider === "openai") return "OPENAI_API_KEY";
   if (provider === "anthropic") return "ANTHROPIC_API_KEY";
   return "GEMINI_API_KEY";
+}
+
+function redactSecrets(line: string, secrets: string[]) {
+  let out = line;
+  for (const s of secrets) {
+    if (!s) continue;
+    // replace all occurrences; keep it simple for MVP
+    out = out.split(s).join("***REDACTED***");
+  }
+  return out;
 }
 
 export async function dockerRunBmad(params: RunParams): Promise<void> {
@@ -36,12 +47,19 @@ export async function dockerRunBmad(params: RunParams): Promise<void> {
     return;
   }
 
+  RunsStore.appendLog(
+    runId,
+    `[runner] using key=${maskKey(providerKey)} (${useOwnKey ? "byok" : "managed"}) provider=${provider}`
+  );
+
   // Never log the raw key.
   const inputJson = JSON.stringify(input ?? {});
 
   const dockerArgs = [
     "run",
     "--rm",
+    "--name",
+    `bmadly-${runId}`,
     "-e",
     `BMAD_PROVIDER=${provider}`,
     "-e",
@@ -63,14 +81,16 @@ export async function dockerRunBmad(params: RunParams): Promise<void> {
       env: { ...process.env }
     });
 
+    const secretsToRedact = [providerKey];
+
     child.stdout.on("data", (buf) => {
       const lines = buf.toString("utf8").split(/\r?\n/).filter(Boolean);
-      for (const line of lines) RunsStore.appendLog(runId, line);
+      for (const line of lines) RunsStore.appendLog(runId, redactSecrets(line, secretsToRedact));
     });
 
     child.stderr.on("data", (buf) => {
       const lines = buf.toString("utf8").split(/\r?\n/).filter(Boolean);
-      for (const line of lines) RunsStore.appendLog(runId, line);
+      for (const line of lines) RunsStore.appendLog(runId, redactSecrets(line, secretsToRedact));
     });
 
     child.on("close", (code) => {
@@ -89,8 +109,15 @@ export async function dockerRunBmad(params: RunParams): Promise<void> {
 
         RunsStore.finish(runId, { status: "succeeded", output: parsed });
       } else {
+        RunsStore.appendLog(runId, `[runner] container exited code=${code}`);
         RunsStore.finish(runId, { status: "failed", output: { error: `Container exited with code ${code}` } });
       }
+      resolve();
+    });
+
+    child.on("error", (err) => {
+      RunsStore.appendLog(runId, `[runner] docker spawn error: ${String(err?.message || err)}`);
+      RunsStore.finish(runId, { status: "failed", output: { error: "Docker failed to start. Is Docker running?" } });
       resolve();
     });
   });

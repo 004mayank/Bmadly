@@ -13,9 +13,28 @@ export type RunRecord = {
   meta: RunMeta;
   logs: string[];
   output?: unknown;
+  finishedAt?: number;
 };
 
 const runs = new Map<string, RunRecord>();
+
+const MAX_LOG_LINES = Number(process.env.MAX_LOG_LINES || 2000);
+const FINISHED_TTL_MS = Number(process.env.FINISHED_TTL_MS || 10 * 60 * 1000);
+
+function pruneLogs(r: RunRecord) {
+  if (r.logs.length > MAX_LOG_LINES) {
+    r.logs = r.logs.slice(r.logs.length - MAX_LOG_LINES);
+  }
+}
+
+function gc() {
+  const now = Date.now();
+  for (const [id, r] of runs.entries()) {
+    if ((r.status === "succeeded" || r.status === "failed") && r.finishedAt && now - r.finishedAt > FINISHED_TTL_MS) {
+      runs.delete(id);
+    }
+  }
+}
 
 export const RunsStore = {
   create(runId: string, meta: RunMeta) {
@@ -36,6 +55,7 @@ export const RunsStore = {
     const r = runs.get(runId);
     if (!r) return;
     r.logs.push(line);
+    pruneLogs(r);
   },
 
   finish(runId: string, params: { status: Exclude<RunStatus, "queued" | "running">; output?: unknown }) {
@@ -43,5 +63,7 @@ export const RunsStore = {
     if (!r) return;
     r.status = params.status;
     r.output = params.output;
+    r.finishedAt = Date.now();
+    gc();
   }
 };

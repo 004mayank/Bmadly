@@ -11,11 +11,24 @@ const ProviderEnum = z.enum(["openai", "anthropic", "gemini"]);
 
 const StartRunSchema = z.object({
   provider: ProviderEnum,
-  model: z.string().min(1),
+  model: z.string().min(1).max(80),
   useOwnKey: z.boolean().default(false),
   apiKey: z.string().optional(),
   input: z.record(z.any()).optional()
 });
+
+function normalizeApiKey(key: string) {
+  return key.trim();
+}
+
+function validateApiKeyFormat(provider: z.infer<typeof ProviderEnum>, key: string) {
+  // Keep this intentionally loose for MVP (providers change prefixes).
+  // We only prevent obvious bad inputs.
+  if (key.length < 8) return "too short";
+  if (/\s/.test(key)) return "contains whitespace";
+  if (provider === "openai" && !/^sk-/.test(key)) return null; // allow other OpenAI key formats
+  return null;
+}
 
 runsRouter.post("/run", async (req, res) => {
   const parsed = StartRunSchema.safeParse(req.body);
@@ -25,8 +38,12 @@ runsRouter.post("/run", async (req, res) => {
 
   const { provider, model, useOwnKey, apiKey, input } = parsed.data;
 
-  if (useOwnKey && (!apiKey || apiKey.trim().length < 8)) {
-    return res.status(400).json({ error: "BYOK enabled but apiKey is missing/too short" });
+  let normalizedKey: string | undefined;
+  if (useOwnKey) {
+    if (!apiKey) return res.status(400).json({ error: "BYOK enabled but apiKey is missing" });
+    normalizedKey = normalizeApiKey(apiKey);
+    const bad = validateApiKeyFormat(provider, normalizedKey);
+    if (bad) return res.status(400).json({ error: `Invalid apiKey (${bad})` });
   }
 
   const runId = nanoid();
@@ -38,7 +55,7 @@ runsRouter.post("/run", async (req, res) => {
     provider,
     model,
     useOwnKey,
-    apiKey: useOwnKey ? apiKey : undefined,
+    apiKey: useOwnKey ? normalizedKey : undefined,
     input
   }).catch((err) => {
     RunsStore.appendLog(runId, `[runner] fatal: ${String(err?.message || err)}`);
@@ -48,7 +65,7 @@ runsRouter.post("/run", async (req, res) => {
   // eslint-disable-next-line no-console
   console.log(
     `[bmadly] run started ${runId} provider=${provider} model=${model} byok=${useOwnKey}` +
-      (useOwnKey ? ` apiKey=${maskKey(apiKey!)}` : "")
+      (useOwnKey ? ` apiKey=${maskKey(normalizedKey!)}` : "")
   );
 
   res.json({ runId, status: "started" });
@@ -64,6 +81,9 @@ runsRouter.get("/run/:runId/stream", (req, res) => {
     "Cache-Control": "no-cache, no-transform",
     Connection: "keep-alive"
   });
+
+  // Nudge proxies to flush immediately.
+  res.write(`:ok\n\n`);
 
   // initial event
   res.write(`event: meta\ndata: ${JSON.stringify({ runId, status: run.status })}\n\n`);
