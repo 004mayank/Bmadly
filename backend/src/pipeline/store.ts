@@ -10,6 +10,9 @@ export type PipelineRecord = {
   logs: string[];
   result?: PipelineResult;
   previewPath?: string; // local filesystem path to preview root
+  previewUrl?: string;
+  previewReady?: boolean;
+  containerId?: string;
   history: Array<{ version: number; result: PipelineResult; finishedAt: number }>;
 };
 
@@ -67,6 +70,14 @@ export const PipelineStore = {
     const r = runs.get(runId);
     if (!r) return;
     r.previewPath = previewPath;
+  },
+
+  setLivePreview(runId: string, params: { previewUrl: string; previewReady: boolean; containerId?: string }) {
+    const r = runs.get(runId);
+    if (!r) return;
+    r.previewUrl = params.previewUrl;
+    r.previewReady = params.previewReady;
+    r.containerId = params.containerId;
   },
 
   finish(runId: string, result: PipelineResult) {

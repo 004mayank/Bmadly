@@ -178,5 +178,12 @@ pipelineRouter.get("/pipeline/run/:runId/result", (req, res) => {
     return res.json({ runId, status: run.status, version: run.version });
   }
 
-  return res.json({ runId, status: run.status, version: run.version, result: run.result ?? null });
+  return res.json({
+    runId,
+    status: run.status,
+    version: run.version,
+    previewUrl: run.previewUrl,
+    previewReady: run.previewReady,
+    result: run.result ?? null
+  });
 });

@@ -8,6 +8,7 @@ import { iterationAgent, type IterationIntent } from "../agents/iteration.js";
 import { runDockerStaticBuild } from "../execution/dockerStaticRunner.js";
 import { previewPathForRun, rmPreview } from "../execution/staticPreviewManager.js";
 import fs from "node:fs";
+import { runDockerLivePreview, stopContainer } from "../execution/dockerLivePreviewRunner.js";
 
 export async function runFullPipeline(params: {
   runId: string;
@@ -41,7 +42,8 @@ export async function runFullPipeline(params: {
 
   const version = PipelineStore.get(runId)?.version ?? 1;
 
-  const execRes = await runDockerStaticBuild({
+  // Live preview mode (Next.js dev server in container)
+  const liveRes = await runDockerLivePreview({
     runId,
     version,
     provider: config.provider,
@@ -53,27 +55,32 @@ export async function runFullPipeline(params: {
     onLog
   });
 
-  if ("error" in execRes) {
+  if (!liveRes.ok) {
     const result: PipelineResult = {
       status: "failed",
       version,
       plan,
       tasks,
       build,
-      error: execRes.error
+      previewReady: false,
+      error: liveRes.error
     };
     PipelineStore.finish(runId, result);
     return;
   }
 
-  const previewPath = previewPathForRun(runId, version);
-  fs.mkdirSync(previewPath, { recursive: true });
-  // Copy from hostOutDir to previewPath
-  fs.cpSync(execRes.outDirOnHost, previewPath, { recursive: true });
+  PipelineStore.setLivePreview(runId, {
+    previewUrl: liveRes.previewUrl,
+    previewReady: true,
+    containerId: liveRes.containerId
+  });
 
-  PipelineStore.setPreview(runId, previewPath);
+  // Auto cleanup after 10 minutes
+  setTimeout(() => {
+    stopContainer(liveRes.containerId).catch(() => {});
+  }, 10 * 60 * 1000);
 
-  const previewUrl = `/preview/${runId}/${version}/`;
+  const previewUrl = liveRes.previewUrl;
 
   const resultBase: PipelineResult = {
     status: "succeeded",
@@ -81,7 +88,8 @@ export async function runFullPipeline(params: {
     plan,
     tasks,
     build,
-    previewUrl
+    previewUrl,
+    previewReady: true
   };
 
   onLog(`[agent:reviewer] reviewing…`);
@@ -131,7 +139,7 @@ export async function runIteration(params: {
   const tasks = await decomposerAgent(newPlan);
   const build = await builderAgent({ plan: newPlan, tasks, llm });
 
-  const execRes = await runDockerStaticBuild({
+  const liveRes = await runDockerLivePreview({
     runId,
     version,
     provider: config.provider,
@@ -143,25 +151,30 @@ export async function runIteration(params: {
     onLog
   });
 
-  if ("error" in execRes) {
+  if (!liveRes.ok) {
     PipelineStore.finish(runId, {
       status: "failed",
       version,
       plan: newPlan,
       tasks,
       build,
-      error: execRes.error
+      previewReady: false,
+      error: liveRes.error
     });
     return;
   }
 
-  const previewPath = previewPathForRun(runId, version);
-  fs.mkdirSync(previewPath, { recursive: true });
-  fs.cpSync(execRes.outDirOnHost, previewPath, { recursive: true });
+  PipelineStore.setLivePreview(runId, {
+    previewUrl: liveRes.previewUrl,
+    previewReady: true,
+    containerId: liveRes.containerId
+  });
 
-  PipelineStore.setPreview(runId, previewPath);
+  setTimeout(() => {
+    stopContainer(liveRes.containerId).catch(() => {});
+  }, 10 * 60 * 1000);
 
-  const previewUrl = `/preview/${runId}/${version}/`;
+  const previewUrl = liveRes.previewUrl;
 
   const base: PipelineResult = {
     status: "succeeded",
@@ -169,7 +182,8 @@ export async function runIteration(params: {
     plan: newPlan,
     tasks,
     build,
-    previewUrl
+    previewUrl,
+    previewReady: true
   };
 
   const review = await reviewerAgent({ result: base, logs: PipelineStore.get(runId)?.logs ?? [], llm });

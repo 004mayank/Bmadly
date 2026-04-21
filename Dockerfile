@@ -9,6 +9,9 @@ WORKDIR /app
 # (Future) Install BMAD dependencies here. For now, we only need runner scripts.
 COPY docker/runner /app/runner
 
+# For live preview mode we run a Next.js dev server. Cache npm where possible.
+RUN chmod +x /app/runner/*.sh || true
+
 ENV BMAD_COMMAND="node /app/runner/mock-bmad.js"
 
 CMD ["bash", "-lc", "$BMAD_COMMAND"]

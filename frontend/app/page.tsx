@@ -135,7 +135,8 @@ export default function HomePage() {
       const result = j?.result;
       if (result?.plan) setPlanJson(JSON.stringify(result.plan, null, 2));
       if (result?.review) setReviewText(JSON.stringify(result.review, null, 2));
-      if (result?.previewUrl) setPreviewUrl(`${API_BASE_URL}${result.previewUrl}`);
+      // live preview URL may be absolute (http://localhost:PORT)
+      if (j?.previewUrl) setPreviewUrl(String(j.previewUrl));
       setOutput(JSON.stringify(result ?? null, null, 2));
     });
 
