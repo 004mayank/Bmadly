@@ -22,6 +22,8 @@ export default function HomePage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [output, setOutput] = useState<string>("");
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
+  const [startedAt, setStartedAt] = useState<number | null>(null);
+  const [elapsedSec, setElapsedSec] = useState<number>(0);
 
   const terminalRef = useRef<HTMLDivElement | null>(null);
 
@@ -36,9 +38,27 @@ export default function HomePage() {
     terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight });
   }, [logs]);
 
+  useEffect(() => {
+    if (!startedAt) return;
+    const t = setInterval(() => {
+      setElapsedSec(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
+    }, 250);
+    return () => clearInterval(t);
+  }, [startedAt]);
+
+  function clearPanels() {
+    setLogs([]);
+    setOutput("");
+    setRunState({ status: "idle" });
+    setStartedAt(null);
+    setElapsedSec(0);
+  }
+
   async function startRun() {
     setOutput("");
     setLogs([]);
+    setStartedAt(Date.now());
+    setElapsedSec(0);
 
     if (!provider || !model) {
       setRunState({ status: "error", message: "Select provider and model." });
@@ -72,6 +92,7 @@ export default function HomePage() {
       setRunState({ status: "running", runId: data.runId });
       streamLogs(data.runId);
     } catch (e: any) {
+      setStartedAt(null);
       setRunState({ status: "error", message: e?.message || "Failed to start run" });
     }
   }
@@ -90,6 +111,7 @@ export default function HomePage() {
 
       const finalStatus = msg.status as "succeeded" | "failed";
       setRunState({ status: "done", runId, finalStatus });
+      setStartedAt(null);
 
       // fetch result
       const r = await fetch(`${API_BASE_URL}/api/run/${runId}/result`);
@@ -99,11 +121,25 @@ export default function HomePage() {
 
     es.onerror = () => {
       es.close();
+      setStartedAt(null);
       setRunState({ status: "error", message: "Stream disconnected." });
     };
   }
 
   const isRunning = runState.status === "running";
+  const currentRunId =
+    runState.status === "running"
+      ? runState.runId
+      : runState.status === "done"
+        ? runState.runId
+        : null;
+
+  const elapsedLabel = useMemo(() => {
+    const s = elapsedSec;
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    return `${mm}:${ss}`;
+  }, [elapsedSec]);
 
   return (
     <main>
@@ -119,9 +155,24 @@ export default function HomePage() {
               <span className={isRunning ? "ok" : "muted"}>●</span>
               <span style={{ fontWeight: 600 }}>{isRunning ? "Running" : "Ready"}</span>
             </div>
-            <div className="badge" style={{ maxWidth: 230, overflow: "hidden", textOverflow: "ellipsis" }}>
-              <span className="muted">API</span>
-              <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{API_BASE_URL}</span>
+            <div className="row" style={{ justifyContent: "flex-end" }}>
+              {currentRunId && (
+                <div className="badge" title={currentRunId}>
+                  <span className="muted">runId</span>
+                  <span style={{ fontSize: 12, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {currentRunId}
+                  </span>
+                </div>
+              )}
+              {isRunning && (
+                <div className="badge">
+                  <span className="muted">elapsed</span>
+                  <span style={{ fontSize: 12 }}>{elapsedLabel}</span>
+                </div>
+              )}
+              <button className="btnSecondary" type="button" onClick={clearPanels} disabled={isRunning}>
+                Clear
+              </button>
             </div>
           </div>
 
