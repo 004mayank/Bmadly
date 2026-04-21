@@ -1,6 +1,6 @@
 # Bmadly
 
-> Run BMAD workflows in your browser — no setup, no CLI, just click and go.
+> Run BMAD workflows in your browser- no setup, no CLI, just click and go.
 
 Bmadly is a browser-first execution platform for BMAD.  
 It removes the complexity of local setup and makes BMAD accessible to anyone through a simple UI.
@@ -51,7 +51,7 @@ Feel free to open issues or submit PRs.
 
 ---
 
-## 📄 License
+## License
 
 MIT License
 
