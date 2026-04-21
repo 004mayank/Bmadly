@@ -43,12 +43,16 @@ The pipeline uses the same managed/BYOK key rules and streams logs via SSE.
 - `GET /api/pipeline/run/:runId/result`
 - `POST /api/pipeline/iterate`
 
-### Preview
-Pipeline runs produce a **static Next.js export** that is served locally from:
+### Preview (live)
+Pipeline runs start a **live Next.js dev server inside Docker** and expose it via dynamic port mapping.
 
-- `GET /preview/:runId/:version/`
+- The backend allocates a free host port (default range: **4000–9000**)
+- The container binds to **0.0.0.0:3000** and is published as `http://localhost:<hostPort>`
+- The UI renders this URL in an iframe
 
-In the UI, this shows up as an iframe preview.
+The backend waits up to ~30s for the preview to become reachable before marking it ready.
+
+Preview containers are automatically cleaned up after ~10 minutes.
 
 ## Managed mode vs BYOK mode
 
@@ -109,18 +113,35 @@ Open:
 - Container prints the final output as a JSON line prefixed with:
   - `[output] {...}`
 
-### Mock BMAD runner
-Right now, the runner is a realistic mock at:
-- `docker/runner/mock-bmad.js`
+### Runner notes
+The runner image is `bmadly-runner:local` (built from `./Dockerfile`).
 
-For the pipeline static preview, the runner is:
-- `docker/runner/mock-bmad-static-nextjs.js`
+This repo contains mock runners to keep the platform runnable even before real BMAD wiring:
+
+- `docker/runner/mock-bmad.js` — basic mock (logs + JSON output)
+- `docker/runner/mock-bmad-static-nextjs.js` — generates a real static Next.js export (useful for early preview experiments)
+- `docker/runner/live-nextjs.sh` — starts a Next.js dev server for **live preview**
 
 Swap to real BMAD later by changing `.env`:
 ```bash
 BMAD_COMMAND=npx bmad run
 ```
 …and updating the Dockerfile to install BMAD dependencies.
+
+## Live preview execution flow
+
+For each pipeline run:
+
+1) **Generation container** (one-shot)
+   - mounts `./.bmadly-live/<runId>/<version>/app` → `/work/app`
+   - runs `BMAD_COMMAND` and expects it to write a runnable Next.js app into `/work/app`
+
+2) **Preview container** (long-running)
+   - mounts the same `/work/app`
+   - runs `npx next dev --hostname 0.0.0.0 --port 3000`
+   - published to a dynamic host port (e.g. `http://localhost:4123`)
+
+If your real BMAD writes output elsewhere, update the generator step to emit into `/work/app`.
 
 ## Known limitations (MVP)
 - In-memory run storage (lost on backend restart)
