@@ -38,6 +38,13 @@ function validateKey(k: string) {
   return null;
 }
 
+function envKeyFor(provider: string) {
+  if (provider === "openai") return process.env.OPENAI_API_KEY;
+  if (provider === "anthropic") return process.env.ANTHROPIC_API_KEY;
+  if (provider === "gemini") return process.env.GEMINI_API_KEY;
+  return undefined;
+}
+
 pipelineRouter.post("/pipeline/run", async (req, res) => {
   const parsed = StartSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
@@ -50,6 +57,14 @@ pipelineRouter.post("/pipeline/run", async (req, res) => {
     normalizedKey = normalizeKey(apiKey);
     const bad = validateKey(normalizedKey);
     if (bad) return res.status(400).json({ error: `Invalid apiKey (${bad})` });
+  }
+
+  if (!useOwnKey) {
+    const managed = envKeyFor(provider);
+    if (!managed || managed.trim().length < 8) {
+      return res.status(400).json({ error: `Managed key missing for provider=${provider}. Set env var or enable BYOK.` });
+    }
+    normalizedKey = managed.trim();
   }
 
   const runId = nanoid();
@@ -95,6 +110,14 @@ pipelineRouter.post("/pipeline/iterate", async (req, res) => {
     normalizedKey = normalizeKey(apiKey);
     const bad = validateKey(normalizedKey);
     if (bad) return res.status(400).json({ error: `Invalid apiKey (${bad})` });
+  }
+
+  if (!useOwnKey) {
+    const managed = envKeyFor(provider);
+    if (!managed || managed.trim().length < 8) {
+      return res.status(400).json({ error: `Managed key missing for provider=${provider}. Set env var or enable BYOK.` });
+    }
+    normalizedKey = managed.trim();
   }
 
   const rec = PipelineStore.get(runId);

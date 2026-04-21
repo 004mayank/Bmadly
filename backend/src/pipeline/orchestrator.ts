@@ -19,8 +19,14 @@ export async function runFullPipeline(params: {
 
   PipelineStore.setStatus(runId, "running");
 
+  const llm = {
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey!
+  };
+
   onLog(`[agent:planner] planning…`);
-  const plan = await plannerAgent(idea);
+  const plan = await plannerAgent({ idea, llm });
   onLog(`[agent:planner] done`);
 
   onLog(`[agent:decomposer] decomposing…`);
@@ -28,7 +34,7 @@ export async function runFullPipeline(params: {
   onLog(`[agent:decomposer] done (${tasks.length} tasks)`);
 
   onLog(`[agent:builder] preparing BMAD input…`);
-  const build = await builderAgent({ plan, tasks });
+  const build = await builderAgent({ plan, tasks, llm });
   onLog(`[agent:builder] done`);
 
   onLog(`[exec] starting docker build…`);
@@ -79,7 +85,7 @@ export async function runFullPipeline(params: {
   };
 
   onLog(`[agent:reviewer] reviewing…`);
-  const review = await reviewerAgent({ result: resultBase, logs: PipelineStore.get(runId)?.logs ?? [] });
+  const review = await reviewerAgent({ result: resultBase, logs: PipelineStore.get(runId)?.logs ?? [], llm });
   onLog(`[agent:reviewer] done`);
 
   PipelineStore.finish(runId, { ...resultBase, review });
@@ -93,6 +99,12 @@ export async function runIteration(params: {
   onLog: (line: string) => void;
 }): Promise<void> {
   const { runId, intent, note, config, onLog } = params;
+
+  const llm = {
+    provider: config.provider,
+    model: config.model,
+    apiKey: config.apiKey!
+  };
 
   const current = PipelineStore.get(runId);
   if (!current?.result) {
@@ -117,7 +129,7 @@ export async function runIteration(params: {
   onLog(`[iter] version=${version} intent=${intent}`);
 
   const tasks = await decomposerAgent(newPlan);
-  const build = await builderAgent({ plan: newPlan, tasks });
+  const build = await builderAgent({ plan: newPlan, tasks, llm });
 
   const execRes = await runDockerStaticBuild({
     runId,
@@ -160,7 +172,7 @@ export async function runIteration(params: {
     previewUrl
   };
 
-  const review = await reviewerAgent({ result: base, logs: PipelineStore.get(runId)?.logs ?? [] });
+  const review = await reviewerAgent({ result: base, logs: PipelineStore.get(runId)?.logs ?? [], llm });
   PipelineStore.finish(runId, { ...base, review });
 
   // (MVP) previews accumulate; GC for finished runs will eventually drop store entries.

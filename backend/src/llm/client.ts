@@ -1,0 +1,118 @@
+import type { Provider } from "../pipeline/types.js";
+
+export type LlmConfig = {
+  provider: Provider;
+  model: string;
+  apiKey: string;
+};
+
+function must<T>(v: T | undefined | null, msg: string): T {
+  if (v === undefined || v === null) throw new Error(msg);
+  return v;
+}
+
+export async function llmJson<T>(params: {
+  config: LlmConfig;
+  system: string;
+  user: string;
+  schemaHint?: string;
+}): Promise<T> {
+  const { config, system, user, schemaHint } = params;
+  if (config.provider === "openai") {
+    return openaiJson<T>({ apiKey: config.apiKey, model: config.model, system, user, schemaHint });
+  }
+  if (config.provider === "anthropic") {
+    return anthropicJson<T>({ apiKey: config.apiKey, model: config.model, system, user, schemaHint });
+  }
+  throw new Error(`Unsupported provider: ${config.provider}`);
+}
+
+async function openaiJson<T>(params: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  schemaHint?: string;
+}): Promise<T> {
+  const { apiKey, model, system, user, schemaHint } = params;
+
+  const body: any = {
+    model,
+    // Use responses API for modern OpenAI; request strict JSON output.
+    input: [
+      { role: "system", content: [{ type: "text", text: system }] },
+      {
+        role: "user",
+        content: [{ type: "text", text: schemaHint ? `${user}\n\nJSON schema hint:\n${schemaHint}` : user }]
+      }
+    ],
+    text: { format: { type: "json_object" } }
+  };
+
+  const resp = await fetch("https://api.openai.com/v1/responses", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    throw new Error(`OpenAI error ${resp.status}: ${t.slice(0, 500)}`);
+  }
+
+  const json: any = await resp.json();
+  // Responses API: try common fields.
+  const text =
+    json?.output_text ??
+    json?.output?.map((o: any) => o?.content?.map((c: any) => c?.text).join(" ")).join("\n") ??
+    "";
+  const parsed = JSON.parse(must(text, "OpenAI returned empty output"));
+  return parsed as T;
+}
+
+async function anthropicJson<T>(params: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  schemaHint?: string;
+}): Promise<T> {
+  const { apiKey, model, system, user, schemaHint } = params;
+
+  const prompt = schemaHint ? `${user}\n\nJSON schema hint:\n${schemaHint}` : user;
+
+  const body: any = {
+    model,
+    max_tokens: 2048,
+    system,
+    messages: [{ role: "user", content: prompt }]
+  };
+
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    throw new Error(`Anthropic error ${resp.status}: ${t.slice(0, 500)}`);
+  }
+
+  const json: any = await resp.json();
+  const text = json?.content?.map((c: any) => c?.text ?? "").join("") ?? "";
+  // Anthropic may include leading/trailing prose; try best-effort JSON extraction.
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) throw new Error("Anthropic did not return JSON");
+  const parsed = JSON.parse(text.slice(start, end + 1));
+  return parsed as T;
+}
+
