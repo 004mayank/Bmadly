@@ -5,10 +5,11 @@ import { decomposerAgent } from "../agents/decomposer.js";
 import { builderAgent } from "../agents/builder.js";
 import { reviewerAgent } from "../agents/reviewer.js";
 import { iterationAgent, type IterationIntent } from "../agents/iteration.js";
-import { runDockerStaticBuild } from "../execution/dockerStaticRunner.js";
 import { previewPathForRun, rmPreview } from "../execution/staticPreviewManager.js";
 import fs from "node:fs";
 import { runDockerLivePreview, stopContainer } from "../execution/dockerLivePreviewRunner.js";
+import { analystAgent } from "../agents/analyst.js";
+import { productManagerAgent } from "../agents/pm.js";
 
 export async function runFullPipeline(params: {
   runId: string;
@@ -26,8 +27,16 @@ export async function runFullPipeline(params: {
     apiKey: config.apiKey!
   };
 
+  onLog(`[agent:analyst] analyzing…`);
+  const analysisMd = await analystAgent({ idea, llm });
+  onLog(`[agent:analyst] done`);
+
+  onLog(`[agent:pm] writing PRD…`);
+  const prdMd = await productManagerAgent({ analysisMd, llm });
+  onLog(`[agent:pm] done`);
+
   onLog(`[agent:planner] planning…`);
-  const plan = await plannerAgent({ idea, llm });
+  const plan = await plannerAgent({ idea: `${idea}\n\nPRD:\n${prdMd}`, llm });
   onLog(`[agent:planner] done`);
 
   onLog(`[agent:decomposer] decomposing…`);
@@ -89,14 +98,27 @@ export async function runFullPipeline(params: {
     tasks,
     build,
     previewUrl,
-    previewReady: true
+    previewReady: true,
+    artifacts: {
+      analysis: { contentType: "text/markdown", content: analysisMd },
+      prd: { contentType: "text/markdown", content: prdMd },
+      plan: { contentType: "application/json", content: JSON.stringify(plan, null, 2) },
+      tasks: { contentType: "application/json", content: JSON.stringify(tasks, null, 2) }
+    }
   };
 
   onLog(`[agent:reviewer] reviewing…`);
   const review = await reviewerAgent({ result: resultBase, logs: PipelineStore.get(runId)?.logs ?? [], llm });
   onLog(`[agent:reviewer] done`);
 
-  PipelineStore.finish(runId, { ...resultBase, review });
+  PipelineStore.finish(runId, {
+    ...resultBase,
+    review,
+    artifacts: {
+      ...resultBase.artifacts,
+      review: { contentType: "application/json", content: JSON.stringify(review, null, 2) }
+    }
+  });
 }
 
 export async function runIteration(params: {

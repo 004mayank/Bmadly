@@ -25,6 +25,8 @@ export default function HomePage() {
   const [planJson, setPlanJson] = useState<string>("");
   const [reviewText, setReviewText] = useState<string>("");
   const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [analysisMd, setAnalysisMd] = useState<string>("");
+  const [prdMd, setPrdMd] = useState<string>("");
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState<number>(0);
@@ -56,6 +58,8 @@ export default function HomePage() {
     setPlanJson("");
     setReviewText("");
     setPreviewUrl("");
+    setAnalysisMd("");
+    setPrdMd("");
     setRunState({ status: "idle" });
     setStartedAt(null);
     setElapsedSec(0);
@@ -67,6 +71,8 @@ export default function HomePage() {
     setPlanJson("");
     setReviewText("");
     setPreviewUrl("");
+    setAnalysisMd("");
+    setPrdMd("");
     setStartedAt(Date.now());
     setElapsedSec(0);
 
@@ -133,6 +139,8 @@ export default function HomePage() {
       const r = await fetch(`${API_BASE_URL}/api/pipeline/run/${runId}/result`);
       const j = await r.json().catch(() => null);
       const result = j?.result;
+      if (result?.artifacts?.analysis?.content) setAnalysisMd(String(result.artifacts.analysis.content));
+      if (result?.artifacts?.prd?.content) setPrdMd(String(result.artifacts.prd.content));
       if (result?.plan) setPlanJson(JSON.stringify(result.plan, null, 2));
       if (result?.review) setReviewText(JSON.stringify(result.review, null, 2));
       // live preview URL may be absolute (http://localhost:PORT)
@@ -373,6 +381,30 @@ export default function HomePage() {
 
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">Analysis</div>
+                {analysisMd && (
+                  <button className="btnSecondary" onClick={() => navigator.clipboard.writeText(analysisMd).catch(() => {})} type="button">
+                    Copy
+                  </button>
+                )}
+              </div>
+              <div className="output">{analysisMd ? analysisMd : <span className="muted">(analysis will appear here)</span>}</div>
+            </div>
+
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">PRD</div>
+                {prdMd && (
+                  <button className="btnSecondary" onClick={() => navigator.clipboard.writeText(prdMd).catch(() => {})} type="button">
+                    Copy
+                  </button>
+                )}
+              </div>
+              <div className="output">{prdMd ? prdMd : <span className="muted">(PRD will appear here)</span>}</div>
+            </div>
+
             <div>
               <div className="sectionTitle">
                 <div className="sectionTitleText">Plan</div>

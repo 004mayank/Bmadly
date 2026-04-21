@@ -39,6 +39,14 @@ export type PipelineResult = {
   build: BuildArtifact;
   previewUrl?: string;
   previewReady?: boolean;
+  artifacts?: {
+    analysis?: { contentType: string; content: string };
+    prd?: { contentType: string; content: string };
+    plan?: { contentType: string; content: string };
+    tasks?: { contentType: string; content: string };
+    dev?: { contentType: string; content: string };
+    review?: { contentType: string; content: string };
+  };
   review?: {
     summary: string;
     suggestions: string[];
