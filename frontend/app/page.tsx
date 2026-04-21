@@ -114,34 +114,50 @@ export default function HomePage() {
 
       <div className="grid">
         <section className="panel">
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div className="pill">
+          <div className="titleRow">
+            <div className="badge">
               <span className={isRunning ? "ok" : "muted"}>●</span>
-              <span>{isRunning ? "Running" : "Ready"}</span>
+              <span style={{ fontWeight: 600 }}>{isRunning ? "Running" : "Ready"}</span>
             </div>
-            <div className="pill">
-              <span className="muted">API:</span>
-              <span>{API_BASE_URL}</span>
+            <div className="badge" style={{ maxWidth: 230, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <span className="muted">API</span>
+              <span style={{ fontSize: 12, overflow: "hidden", textOverflow: "ellipsis" }}>{API_BASE_URL}</span>
             </div>
           </div>
 
-          <label className="label">LLM Provider</label>
-          <select className="select" value={provider} onChange={(e) => setProvider(e.target.value as ProviderId)} disabled={isRunning}>
-            {PROVIDERS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
+          <div className="split2">
+            <div>
+              <label className="label">LLM Provider</label>
+              <select
+                className="select"
+                value={provider}
+                onChange={(e) => setProvider(e.target.value as ProviderId)}
+                disabled={isRunning}
+              >
+                {PROVIDERS.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <label className="label">Model</label>
-          <select className="select" value={model} onChange={(e) => setModel(e.target.value)} disabled={isRunning}>
-            {providerConfig.models.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
+            <div>
+              <label className="label">Model</label>
+              <select
+                className="select"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={isRunning}
+              >
+                {providerConfig.models.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
           <div className="row" style={{ marginTop: 12, justifyContent: "space-between" }}>
             <label className="pill" style={{ cursor: isRunning ? "not-allowed" : "pointer" }}>
@@ -173,7 +189,7 @@ export default function HomePage() {
             </>
           )}
 
-          <button className="btn" onClick={startRun} disabled={isRunning}>
+          <button className="btnPrimary" onClick={startRun} disabled={isRunning}>
             {isRunning ? "Running…" : "Run BMAD"}
           </button>
 
@@ -188,14 +204,51 @@ export default function HomePage() {
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div className="muted" style={{ marginBottom: 8 }}>Logs</div>
+              <div className="terminalHeader">
+                <div className="muted">Logs</div>
+                {runState.status === "running" && (
+                  <div className="pill">
+                    <span className="muted">streaming</span>
+                    <span className="ok">●</span>
+                  </div>
+                )}
+              </div>
               <div className="terminal" ref={terminalRef}>
-                {logs.length === 0 ? <span className="muted">(logs will appear here)</span> : logs.join("\n")}
+                {logs.length === 0 ? (
+                  <span className="terminalLineDim">(logs will appear here)</span>
+                ) : (
+                  logs.map((line, idx) => {
+                    const cls =
+                      /\b(error|failed|fatal)\b/i.test(line)
+                        ? "terminalLineErr"
+                        : /\b(warn|warning)\b/i.test(line)
+                          ? "terminalLineWarn"
+                          : "terminalLine";
+                    return (
+                      <div key={idx} className={cls}>
+                        {line}
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
             <div>
-              <div className="muted" style={{ marginBottom: 8 }}>Output</div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">Output</div>
+                {output && (
+                  <button
+                    className="btnSecondary"
+                    onClick={() => {
+                      navigator.clipboard.writeText(output).catch(() => {});
+                    }}
+                    type="button"
+                  >
+                    Copy
+                  </button>
+                )}
+              </div>
               <div className="output">
                 {output ? output : <span className="muted">(final output will appear here)</span>}
               </div>
