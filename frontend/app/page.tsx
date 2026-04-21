@@ -426,7 +426,11 @@ export default function HomePage() {
                 <div className="sectionTitleText">Preview</div>
               </div>
               <div className="output" style={{ padding: 0, overflow: "hidden" }}>
-                {previewUrl ? (
+                {runState.status === "running" && !previewUrl ? (
+                  <div style={{ padding: 14 }} className="muted">
+                    Starting preview…
+                  </div>
+                ) : previewUrl ? (
                   <iframe
                     src={previewUrl}
                     style={{ width: "100%", height: 320, border: 0, borderRadius: 16 }}

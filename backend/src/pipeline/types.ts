@@ -38,6 +38,7 @@ export type PipelineResult = {
   tasks: Task[];
   build: BuildArtifact;
   previewUrl?: string;
+  previewReady?: boolean;
   review?: {
     summary: string;
     suggestions: string[];
