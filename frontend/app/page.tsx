@@ -54,6 +54,8 @@ export default function HomePage() {
   const [bmadChatInput, setBmadChatInput] = useState<string>("");
   const [bmadStatus, setBmadStatus] = useState<string>("");
   const [bmadAgentSkillId, setBmadAgentSkillId] = useState<string>("bmad-agent-analyst");
+  const [bmadDebugOpen, setBmadDebugOpen] = useState(false);
+  const [bmadDebugJson, setBmadDebugJson] = useState<string>("");
 
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const bmadChatRef = useRef<HTMLDivElement | null>(null);
@@ -207,7 +209,17 @@ export default function HomePage() {
     const j = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(j?.error || `BMAD message failed (${resp.status})`);
     setBmadSession(j.session as BmadSession);
+    if (bmadDebugOpen) {
+      fetchBmadDebug((j.session as BmadSession).id).catch(() => {});
+    }
     setBmadStatus("Ready");
+  }
+
+  async function fetchBmadDebug(sessionId: string) {
+    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/${encodeURIComponent(sessionId)}/debug`);
+    const j = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(j?.error || `Debug failed (${resp.status})`);
+    setBmadDebugJson(JSON.stringify(j, null, 2));
   }
 
   async function startRun() {
@@ -566,6 +578,21 @@ export default function HomePage() {
                   <button
                     className="btnSecondary"
                     type="button"
+                    disabled={!bmadSession}
+                    onClick={() => {
+                      const next = !bmadDebugOpen;
+                      setBmadDebugOpen(next);
+                      if (next && bmadSession) {
+                        fetchBmadDebug(bmadSession.id).catch((e) => setBmadStatus(e?.message || "Debug failed"));
+                      }
+                    }}
+                  >
+                    {bmadDebugOpen ? "Hide debug" : "Debug"}
+                  </button>
+
+                  <button
+                    className="btnSecondary"
+                    type="button"
                     disabled={!currentRunId}
                     onClick={() => {
                       setBmadSession(null);
@@ -577,6 +604,12 @@ export default function HomePage() {
                     Reset
                   </button>
                 </div>
+
+                {bmadDebugOpen && bmadDebugJson ? (
+                  <div className="output" style={{ maxHeight: 200, overflow: "auto" }}>
+                    {bmadDebugJson}
+                  </div>
+                ) : null}
 
                 {bmadMenu && bmadMenu.length > 0 && (
                   <div style={{ display: "grid", gap: 8 }}>

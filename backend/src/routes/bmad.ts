@@ -78,6 +78,62 @@ bmadRouter.get("/bmad/skills/:id", (req, res) => {
   res.json({ ok: true, skill, files: { skillMd, customizeToml } });
 });
 
+const DebugParamsSchema = z.object({ sessionId: z.string().min(6) });
+
+// Debug endpoint: expose current BMAD session execution state (no secrets).
+bmadRouter.get("/bmad/sessions/:sessionId/debug", (req, res) => {
+  const parsed = DebugParamsSchema.safeParse(req.params);
+  if (!parsed.success) return res.status(400).json({ error: "Invalid params" });
+  const { sessionId } = parsed.data;
+  const session = BmadSessionStore.get(sessionId);
+  if (!session) return res.status(404).json({ error: "Session not found" });
+
+  let stepFile: string | null = null;
+  let skillAbsDir: string | null = null;
+  try {
+    if (session.activeSkillId) {
+      const repoRoot = getRepoRoot();
+      const skillsRoot = getBmadSkillsRoot();
+      const all = loadBmadSkills({ skillsRoot, repoRoot });
+      const skill = all.find((s) => s.id === session.activeSkillId);
+      if (skill) {
+        skillAbsDir = skill.absDir;
+        const stepsDir = path.join(skill.absDir, "steps");
+        if (session.step?.kind === "bmad_steps" && fs.existsSync(stepsDir)) {
+          const stepFiles = fs
+            .readdirSync(stepsDir)
+            .filter((f) => /^step-\d+-.+\.md$/.test(f))
+            .sort();
+          const idx = Math.max(0, Math.min(stepFiles.length - 1, (session.step.index ?? 1) - 1));
+          stepFile = stepFiles[idx] ?? null;
+        }
+      }
+    }
+  } catch {
+    // ignore debug resolution errors
+  }
+
+  res.json({
+    ok: true,
+    sessionId: session.id,
+    runId: session.runId,
+    agentSkillId: session.agentSkillId ?? null,
+    activeSkillId: session.activeSkillId ?? null,
+    step: session.step ?? null,
+    stepsCompleted: session.stepContext?.stepsCompleted ?? null,
+    stepFile,
+    skillAbsDir,
+    docArtifact:
+      session.stepContext && session.stepContext.docArtifactId
+        ? {
+            id: String(session.stepContext.docArtifactId),
+            type: session.artifacts.find((a) => a.id === session.stepContext!.docArtifactId)?.type ?? null,
+            title: session.artifacts.find((a) => a.id === session.stepContext!.docArtifactId)?.title ?? null
+          }
+        : null
+  });
+});
+
 const ProviderEnum = z.enum(["openai", "anthropic", "gemini"]);
 
 const CreateSessionSchema = z.object({
