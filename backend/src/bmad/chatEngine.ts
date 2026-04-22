@@ -146,8 +146,16 @@ export async function advanceSession(params: {
 
   // Step-runner (supports bmad-market-research and similar).
   if (active) {
-    // Step dirs vary by skill: steps/, domain-steps/, technical-steps/
-    const stepDirCandidates = ["steps", "domain-steps", "technical-steps"].map((d) => path.join(active.absDir, d));
+    // Step dirs vary by skill: steps/, domain-steps/, technical-steps/, and some skills use steps-*.
+    const candidateNames = [
+      "steps",
+      "domain-steps",
+      "technical-steps",
+      "steps-c",
+      "steps-v",
+      "steps-e"
+    ];
+    const stepDirCandidates = candidateNames.map((d) => path.join(active.absDir, d));
     const stepsDir = stepDirCandidates.find((d) => fs.existsSync(d) && fs.statSync(d).isDirectory()) || null;
     if (stepsDir) {
       const stepFiles = fs
@@ -181,6 +189,11 @@ export async function advanceSession(params: {
         active.id === "bmad-market-research" ? "market-research" :
         active.id === "bmad-domain-research" ? "domain-research" :
         active.id === "bmad-technical-research" ? "technical-research" :
+        active.id === "bmad-create-prd" ? "prd" :
+        active.id === "bmad-edit-prd" ? "prd" :
+        active.id === "bmad-validate-prd" ? "prd-review" :
+        active.id === "bmad-create-epics-and-stories" ? "epics-and-stories" :
+        active.id === "bmad-check-implementation-readiness" ? "implementation-readiness" :
         `${active.id}-doc`;
       const existingDoc = session.stepContext?.docContent || "";
       const system =

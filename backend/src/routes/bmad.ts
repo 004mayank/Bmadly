@@ -98,7 +98,14 @@ bmadRouter.get("/bmad/sessions/:sessionId/debug", (req, res) => {
       const skill = all.find((s) => s.id === session.activeSkillId);
       if (skill) {
         skillAbsDir = skill.absDir;
-        const stepDirCandidates = ["steps", "domain-steps", "technical-steps"].map((d) => path.join(skill.absDir, d));
+        const stepDirCandidates = [
+          "steps",
+          "domain-steps",
+          "technical-steps",
+          "steps-c",
+          "steps-v",
+          "steps-e"
+        ].map((d) => path.join(skill.absDir, d));
         const stepsDir = stepDirCandidates.find((d) => fs.existsSync(d) && fs.statSync(d).isDirectory()) || null;
         if (session.step?.kind === "bmad_steps" && stepsDir) {
           const stepFiles = fs
