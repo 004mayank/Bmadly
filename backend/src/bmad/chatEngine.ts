@@ -73,6 +73,30 @@ function upsertSessionArtifact(
   return { id: rec.id, createdAt };
 }
 
+function isoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function ensureFrontmatter(content: string, meta: Record<string, any>) {
+  const has = content.trimStart().startsWith("---\n");
+  const lines = content.split(/\r?\n/);
+
+  const fmLines: string[] = [];
+  for (const [k, v] of Object.entries(meta)) {
+    if (Array.isArray(v)) fmLines.push(`${k}: [${v.map((x) => JSON.stringify(x)).join(", ")}]`);
+    else fmLines.push(`${k}: ${JSON.stringify(v)}`);
+  }
+
+  const fm = `---\n${fmLines.join("\n")}\n---\n`;
+  if (!has) return fm + content;
+
+  // Replace existing frontmatter block (best-effort).
+  const endIdx = lines.findIndex((l, idx) => idx > 0 && l.trim() === "---");
+  if (endIdx === -1) return fm + content; // malformed
+  const rest = lines.slice(endIdx + 1).join("\n");
+  return fm + rest;
+}
+
 export function loadAgentMenu(agentSkillId: string) {
   const repoRoot = getRepoRoot();
   const skillsRoot = getBmadSkillsRoot();
@@ -178,8 +202,20 @@ export async function advanceSession(params: {
       // Persist/update document for this step-based skill.
       if (r?.doc?.content && typeof r.doc.content === "string") {
         const title = r.doc.title ? String(r.doc.title) : active.id;
-        const { id, createdAt } = upsertSessionArtifact(session, { type: artifactType, title, content: r.doc.content });
+        // Track completed steps (previous step if user sent C, otherwise current step index).
+        const completedIdx = wantsContinue ? Math.max(1, currentIndex) : Math.max(1, currentIndex);
+        const prev = (session.stepContext?.stepsCompleted as number[] | undefined) ?? [];
+        const stepsCompleted = Array.from(new Set([...prev, completedIdx])).sort((a, b) => a - b);
+
+        const withFm = ensureFrontmatter(r.doc.content, {
+          skill: active.id,
+          stepsCompleted,
+          updatedAt: isoDate()
+        });
+
+        const { id, createdAt } = upsertSessionArtifact(session, { type: artifactType, title, content: withFm });
         session.stepContext = { ...(session.stepContext || {}), docContent: r.doc.content, docArtifactId: id, docCreatedAt: createdAt };
+        session.stepContext.stepsCompleted = stepsCompleted;
       }
 
       // If user requested Modify, don't advance; (already enforced). We don't need special handling here.
