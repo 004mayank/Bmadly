@@ -20,6 +20,7 @@ type BmadSession = {
   runId: string;
   agentSkillId?: string;
   activeSkillId?: string;
+  step?: { kind: string; index: number; total?: number };
   messages: BmadChatMessage[];
   artifacts: Array<{ id: string; type: string; title?: string; content: string; createdAt: number }>;
 };
@@ -522,12 +523,18 @@ export default function HomePage() {
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">BMAD Chat (WIP)</div>
-                <div className="muted" style={{ fontSize: 12 }}>
-                  {bmadStatus || ""}
+                <div className="sectionTitle">
+                  <div className="sectionTitleText">BMAD Chat (WIP)</div>
+                  <div className="muted" style={{ fontSize: 12 }}>
+                  {bmadSession?.step?.kind === "bmad_steps" ? (
+                    <>
+                      step {bmadSession.step.index}/{bmadSession.step.total ?? "?"} • {bmadStatus || ""}
+                    </>
+                  ) : (
+                    bmadStatus || ""
+                  )}
+                  </div>
                 </div>
-              </div>
 
               <div className="output" style={{ display: "grid", gap: 10 }}>
                 <div className="row" style={{ flexWrap: "wrap" }}>
@@ -599,6 +606,31 @@ export default function HomePage() {
                       }
                     }}
                   />
+                  <button
+                    className="btnSecondary"
+                    type="button"
+                    disabled={bmadSession?.step?.kind !== "bmad_steps"}
+                    onClick={() => {
+                      setBmadChatInput("C");
+                      // queue send in next tick so state applies
+                      setTimeout(() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed")), 0);
+                    }}
+                    title="BMAD continue"
+                  >
+                    Continue
+                  </button>
+                  <button
+                    className="btnSecondary"
+                    type="button"
+                    disabled={bmadSession?.step?.kind !== "bmad_steps"}
+                    onClick={() => {
+                      setBmadChatInput("Modify");
+                      setTimeout(() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed")), 0);
+                    }}
+                    title="BMAD modify scope"
+                  >
+                    Modify
+                  </button>
                   <button className="btnPrimary" type="button" onClick={() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed"))}>
                     Send
                   </button>
