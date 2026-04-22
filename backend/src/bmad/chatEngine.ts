@@ -55,6 +55,24 @@ function readIfExists(p: string) {
   return fs.existsSync(p) ? fs.readFileSync(p, "utf8") : null;
 }
 
+function upsertSessionArtifact(
+  session: BmadSessionState,
+  artifact: { type: string; title?: string; content: string }
+): { id: string; createdAt: number } {
+  const existingIdx = session.artifacts.findIndex((a) => a.type === artifact.type && (artifact.title ? a.title === artifact.title : true));
+  const createdAt = Date.now();
+  const rec = {
+    id: existingIdx >= 0 ? session.artifacts[existingIdx].id : `${createdAt}`,
+    type: artifact.type,
+    title: artifact.title,
+    content: artifact.content,
+    createdAt
+  };
+  if (existingIdx >= 0) session.artifacts[existingIdx] = rec;
+  else session.artifacts.push(rec);
+  return { id: rec.id, createdAt };
+}
+
 export function loadAgentMenu(agentSkillId: string) {
   const repoRoot = getRepoRoot();
   const skillsRoot = getBmadSkillsRoot();
@@ -113,17 +131,16 @@ export async function advanceSession(params: {
 
       const total = stepFiles.length;
       const currentIndex = session.step?.kind === "bmad_steps" ? session.step.index : 1;
-      const currentFile = stepFiles[Math.max(0, Math.min(total - 1, currentIndex - 1))];
-      const stepMd = fs.readFileSync(path.join(stepsDir, currentFile), "utf8");
 
-      // Gate: only advance to next step when user explicitly confirms with "C".
-      const wantsContinue = /^\s*c\s*$/i.test(userMessage.trim());
-      const shouldAdvance = wantsContinue && currentIndex < total;
-      const nextIndex = shouldAdvance ? currentIndex + 1 : currentIndex;
+      // Gate: only advance when user explicitly says C (or Modify stays on step).
+      const trimmed = userMessage.trim();
+      const wantsContinue = /^c$/i.test(trimmed);
+      const wantsModify = /^modify$/i.test(trimmed);
+
+      const nextIndex = wantsContinue && currentIndex < total ? currentIndex + 1 : currentIndex;
       session.step = { kind: "bmad_steps", index: nextIndex, total };
 
-      // Use LLM to produce the assistant's response for the *current* step file.
-      // If user typed C, we will respond with the *next* step's opening prompt.
+      // Respond using the effective step file.
       const effectiveIndex = nextIndex;
       const effectiveFile = stepFiles[Math.max(0, Math.min(total - 1, effectiveIndex - 1))];
       const effectiveMd = fs.readFileSync(path.join(stepsDir, effectiveFile), "utf8");
@@ -133,27 +150,46 @@ export async function advanceSession(params: {
         .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
         .join("\n");
 
+      // Step-based doc handling (first implementation: market research).
+      const artifactType = active.id.includes("market-research") ? "market-research" : `${active.id}-doc`;
+      const existingDoc = session.stepContext?.docContent || "";
       const system =
         (session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +
         `You are executing BMAD skill ${active.id} as a step-by-step workflow inside a chat UI. ` +
         `You MUST follow the step file instructions EXACTLY. Ask one question at a time. ` +
         `If the step says HALT, you must stop after presenting choices and wait for the user's next message. ` +
+        `You are NOT allowed to skip steps. The backend controls step transitions (C/Modify). ` +
+        `\n\nCURRENT DOCUMENT (if any):\n\n${existingDoc || "(none yet)"}` +
         `\n\nCURRENT STEP FILE (authoritative):\n\n${effectiveMd}`;
 
       const user = `Conversation so far:\n${history}\n\nLatest user message:\n${userMessage}`;
 
       const r = await llmJson<{
         text: string;
-        artifact: null | { type: string; title?: string | null; content: string };
+        doc: null | { title?: string | null; content: string };
       }>({
         config: llm,
         system,
         user,
         schemaHint:
-          `{ "text": "string", "artifact": null | { "type": "string", "title": "string?", "content": "string" } }`
+          `{ "text": "string", "doc": null | { "title": "string?", "content": "string" } }`
       });
 
-      return r;
+      // Persist/update document for this step-based skill.
+      if (r?.doc?.content && typeof r.doc.content === "string") {
+        const title = r.doc.title ? String(r.doc.title) : active.id;
+        const { id, createdAt } = upsertSessionArtifact(session, { type: artifactType, title, content: r.doc.content });
+        session.stepContext = { ...(session.stepContext || {}), docContent: r.doc.content, docArtifactId: id, docCreatedAt: createdAt };
+      }
+
+      // If user requested Modify, don't advance; (already enforced). We don't need special handling here.
+      // If user sent C, backend advanced; LLM should now be responding for the next step.
+
+      // Adapt return shape to the outer handler (artifact optional).
+      return {
+        text: String(r?.text ?? "").trim(),
+        artifact: null
+      };
     }
   }
 

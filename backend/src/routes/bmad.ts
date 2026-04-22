@@ -180,28 +180,18 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   const text = String(r?.text ?? "").trim();
   session.messages.push({ role: "assistant", text, ts: Date.now() });
 
-  const artifact = r?.artifact ?? null;
-  if (artifact && typeof artifact?.content === "string") {
-    const id = `${Date.now()}`;
-    const createdAt = Date.now();
-    session.artifacts.push({
-      id,
-      type: artifact.type,
-      title: artifact.title ?? undefined,
-      content: artifact.content,
-      createdAt
-    });
-
-    // Also attach to pipeline run artifacts under artifacts.bmad[]
+  // Sync any new/updated session artifacts to the pipeline run record.
+  // (The step-runner upserts artifacts into the session directly.)
+  for (const a of session.artifacts) {
     PipelineStore.upsertBmadArtifact(session.runId, {
-      id,
-      type: artifact.type,
-      title: artifact.title ?? undefined,
-      content: artifact.content,
-      createdAt
+      id: a.id,
+      type: a.type,
+      title: a.title,
+      content: a.content,
+      createdAt: a.createdAt
     });
   }
 
   BmadSessionStore.save(session);
-  res.json({ ok: true, text, artifact: artifact ?? null, session });
+  res.json({ ok: true, text, artifact: null, session });
 });

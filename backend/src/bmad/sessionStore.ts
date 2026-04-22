@@ -14,6 +14,7 @@ export type BmadSessionState = {
   activeSkillId?: string;
   step?: { kind: string; index: number; total?: number };
   answers: Record<string, string>;
+  stepContext?: Record<string, any>;
   messages: BmadChatMessage[];
   artifacts: Array<{ id: string; type: string; title?: string; content: string; createdAt: number }>;
 };
