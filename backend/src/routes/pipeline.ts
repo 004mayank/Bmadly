@@ -10,6 +10,13 @@ import { maskKey } from "../utils/maskKey.js";
 export const pipelineRouter = Router();
 
 const ProviderEnum = z.enum(["openai", "anthropic", "gemini"]);
+
+// Create a runId without starting the pipeline (used for BMAD chat sessions).
+pipelineRouter.post("/pipeline/create", (_req, res) => {
+  const runId = nanoid();
+  PipelineStore.create(runId);
+  res.json({ runId, status: "created" });
+});
 const StartSchema = z.object({
   idea: z.string().min(3).max(4000),
   provider: ProviderEnum,

@@ -134,16 +134,22 @@ export default function HomePage() {
   }
 
   async function startBmadAgent() {
-    if (!currentRunId) {
-      setBmadStatus("Run the pipeline once to get a runId, then start BMAD chat.");
-      return;
+    let runId = currentRunId;
+    if (!runId) {
+      setBmadStatus("Creating run…");
+      const r = await fetch(`${API_BASE_URL}/api/pipeline/create`, { method: "POST" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error || `Failed to create run (${r.status})`);
+      runId = String(j.runId);
+      // Keep local runState so the runId badge shows up.
+      setRunState({ status: "done", runId, finalStatus: "succeeded" });
     }
     // For BMAD chat: require BYOK for now.
     if (apiKey.trim().length < 8) {
       setBmadStatus("Enter your API key to start BMAD chat.");
       return;
     }
-    const s = await ensureBmadSessionForRun(currentRunId);
+    const s = await ensureBmadSessionForRun(runId);
 
     setBmadStatus("Starting agent…");
     const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/start`, {
@@ -571,7 +577,7 @@ export default function HomePage() {
                     <option value="bmad-agent-tech-writer">Tech Writer</option>
                   </select>
 
-                  <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))} disabled={!currentRunId}>
+                  <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))}>
                     Start agent
                   </button>
 
