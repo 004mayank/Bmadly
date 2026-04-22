@@ -194,16 +194,21 @@ export async function advanceSession(params: {
 
       const user = `Conversation so far:\n${history}\n\nLatest user message:\n${userMessage}`;
 
-      const r = await llmJson<{
+      const schemaHint = `{ "text": "string", "doc": null | { "title": "string?", "content": "string" } }`;
+      let r = await llmJson<{
         text: string;
         doc: null | { title?: string | null; content: string };
-      }>({
-        config: llm,
-        system,
-        user,
-        schemaHint:
-          `{ "text": "string", "doc": null | { "title": "string?", "content": "string" } }`
-      });
+      }>({ config: llm, system, user, schemaHint });
+
+      // Enforce doc updates for research step-flows (retry once).
+      const mustHaveDoc = ["market-research", "domain-research", "technical-research"].includes(artifactType);
+      const hasDoc = Boolean(r?.doc?.content && String(r.doc.content).trim().length > 0);
+      if (mustHaveDoc && !hasDoc) {
+        const system2 =
+          system +
+          "\n\nCRITICAL: You MUST return a non-empty doc.content with the full updated markdown document for this step. Return JSON only.";
+        r = await llmJson({ config: llm, system: system2, user, schemaHint });
+      }
 
       // Update stepsCompleted only when user confirms with C (complete the previous step).
       const prev = (session.stepContext?.stepsCompleted as number[] | undefined) ?? [];
@@ -224,6 +229,10 @@ export async function advanceSession(params: {
         const { id, createdAt } = upsertSessionArtifact(session, { type: artifactType, title, content: withFm });
         session.stepContext = { ...(session.stepContext || {}), docContent: nextDocRaw, docArtifactId: id, docCreatedAt: createdAt, stepsCompleted };
       } else {
+        // If this was a research step-flow and we still don't have a doc, fail loudly.
+        if (["market-research", "domain-research", "technical-research"].includes(artifactType)) {
+          throw new Error(`BMAD step runner: model did not produce required document update for ${active.id}`);
+        }
         session.stepContext = { ...(session.stepContext || {}), stepsCompleted };
       }
 
