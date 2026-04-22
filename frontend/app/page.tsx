@@ -533,6 +533,7 @@ export default function HomePage() {
                   <div className="muted" style={{ fontSize: 12 }}>
                   {bmadSession?.step?.kind === "bmad_steps" ? (
                     <>
+                      {(bmadSession.activeSkillId || "") + " "}
                       step {bmadSession.step.index}/{bmadSession.step.total ?? "?"} • {bmadStatus || ""}
                     </>
                   ) : (
@@ -560,6 +561,20 @@ export default function HomePage() {
 
                   <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))} disabled={!currentRunId}>
                     Start agent
+                  </button>
+
+                  <button
+                    className="btnSecondary"
+                    type="button"
+                    disabled={!currentRunId}
+                    onClick={() => {
+                      setBmadSession(null);
+                      setBmadMenu(null);
+                      setBmadStatus("Reset. Click Start agent to begin a new session.");
+                    }}
+                    title="Reset local BMAD chat state (new session will be created on next start)"
+                  >
+                    Reset
                   </button>
                 </div>
 
