@@ -199,23 +199,26 @@ export async function advanceSession(params: {
           `{ "text": "string", "doc": null | { "title": "string?", "content": "string" } }`
       });
 
-      // Persist/update document for this step-based skill.
-      if (r?.doc?.content && typeof r.doc.content === "string") {
-        const title = r.doc.title ? String(r.doc.title) : active.id;
-        // Track completed steps (previous step if user sent C, otherwise current step index).
-        const completedIdx = wantsContinue ? Math.max(1, currentIndex) : Math.max(1, currentIndex);
-        const prev = (session.stepContext?.stepsCompleted as number[] | undefined) ?? [];
-        const stepsCompleted = Array.from(new Set([...prev, completedIdx])).sort((a, b) => a - b);
+      // Update stepsCompleted only when user confirms with C (complete the previous step).
+      const prev = (session.stepContext?.stepsCompleted as number[] | undefined) ?? [];
+      const completedStep = wantsContinue ? currentIndex : null;
+      const stepsCompleted = completedStep ? Array.from(new Set([...prev, completedStep])).sort((a, b) => a - b) : prev;
 
-        const withFm = ensureFrontmatter(r.doc.content, {
+      // Persist/update document for this step-based skill.
+      // If LLM doesn't return a doc, keep the last doc content.
+      const nextDocRaw = r?.doc?.content && typeof r.doc.content === "string" ? r.doc.content : (session.stepContext?.docContent as string | undefined);
+      if (nextDocRaw && typeof nextDocRaw === "string") {
+        const title = r?.doc?.title ? String(r.doc.title) : active.id;
+        const withFm = ensureFrontmatter(nextDocRaw, {
           skill: active.id,
           stepsCompleted,
           updatedAt: isoDate()
         });
 
         const { id, createdAt } = upsertSessionArtifact(session, { type: artifactType, title, content: withFm });
-        session.stepContext = { ...(session.stepContext || {}), docContent: r.doc.content, docArtifactId: id, docCreatedAt: createdAt };
-        session.stepContext.stepsCompleted = stepsCompleted;
+        session.stepContext = { ...(session.stepContext || {}), docContent: nextDocRaw, docArtifactId: id, docCreatedAt: createdAt, stepsCompleted };
+      } else {
+        session.stepContext = { ...(session.stepContext || {}), stepsCompleted };
       }
 
       // If user requested Modify, don't advance; (already enforced). We don't need special handling here.
