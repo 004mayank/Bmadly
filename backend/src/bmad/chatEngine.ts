@@ -146,8 +146,10 @@ export async function advanceSession(params: {
 
   // Step-runner (supports bmad-market-research and similar).
   if (active) {
-    const stepsDir = path.join(active.absDir, "steps");
-    if (fs.existsSync(stepsDir) && fs.statSync(stepsDir).isDirectory()) {
+    // Step dirs vary by skill: steps/, domain-steps/, technical-steps/
+    const stepDirCandidates = ["steps", "domain-steps", "technical-steps"].map((d) => path.join(active.absDir, d));
+    const stepsDir = stepDirCandidates.find((d) => fs.existsSync(d) && fs.statSync(d).isDirectory()) || null;
+    if (stepsDir) {
       const stepFiles = fs
         .readdirSync(stepsDir)
         .filter((f) => /^step-\d+-.+\.md$/.test(f))
@@ -175,7 +177,11 @@ export async function advanceSession(params: {
         .join("\n");
 
       // Step-based doc handling (first implementation: market research).
-      const artifactType = active.id.includes("market-research") ? "market-research" : `${active.id}-doc`;
+      const artifactType =
+        active.id.includes("market-research") ? "market-research" :
+        active.id.includes("domain-research") ? "domain-research" :
+        active.id.includes("technical-research") ? "technical-research" :
+        `${active.id}-doc`;
       const existingDoc = session.stepContext?.docContent || "";
       const system =
         (session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +

@@ -717,12 +717,13 @@ export default function HomePage() {
 
                 {bmadSession?.step?.kind === "bmad_steps" ? (
                   (() => {
-                    const doc = bmadSession.artifacts.find((a) => a.type === "market-research");
+                    const docTypes = ["market-research", "domain-research", "technical-research"];
+                    const doc = bmadSession.artifacts.find((a) => docTypes.includes(a.type));
                     if (!doc) return null;
                     return (
                       <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                         <div className="muted" style={{ fontSize: 12 }}>
-                          Current Document (market-research)
+                          Current Document ({doc.type})
                         </div>
                         <div style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
