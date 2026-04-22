@@ -56,6 +56,7 @@ export default function HomePage() {
   const [bmadAgentSkillId, setBmadAgentSkillId] = useState<string>("bmad-agent-analyst");
 
   const terminalRef = useRef<HTMLDivElement | null>(null);
+  const bmadChatRef = useRef<HTMLDivElement | null>(null);
 
   const providerConfig = useMemo(() => PROVIDERS.find((p) => p.id === provider)!, [provider]);
 
@@ -67,6 +68,10 @@ export default function HomePage() {
   useEffect(() => {
     terminalRef.current?.scrollTo({ top: terminalRef.current.scrollHeight });
   }, [logs]);
+
+  useEffect(() => {
+    bmadChatRef.current?.scrollTo({ top: bmadChatRef.current.scrollHeight });
+  }, [bmadSession?.messages?.length]);
 
   useEffect(() => {
     if (!startedAt) return;
@@ -173,12 +178,12 @@ export default function HomePage() {
     setBmadSession(j.session as BmadSession);
   }
 
-  async function sendBmadChat() {
+  async function sendBmadChat(overrideMessage?: string) {
     if (!bmadSession) {
       setBmadStatus("Start an agent first.");
       return;
     }
-    const msg = bmadChatInput.trim();
+    const msg = (overrideMessage ?? bmadChatInput).trim();
     if (!msg) return;
 
     if (apiKey.trim().length < 8) {
@@ -581,7 +586,7 @@ export default function HomePage() {
                   </div>
                 )}
 
-                <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid #1f2937", borderRadius: 14, padding: 12, background: "#0b1020" }}>
+                <div ref={bmadChatRef} style={{ maxHeight: 220, overflow: "auto", border: "1px solid #1f2937", borderRadius: 14, padding: 12, background: "#0b1020" }}>
                   {!bmadSession || bmadSession.messages.length === 0 ? (
                     <div className="terminalLineDim">(start an agent to begin chatting)</div>
                   ) : (
@@ -611,9 +616,7 @@ export default function HomePage() {
                     type="button"
                     disabled={bmadSession?.step?.kind !== "bmad_steps"}
                     onClick={() => {
-                      setBmadChatInput("C");
-                      // queue send in next tick so state applies
-                      setTimeout(() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed")), 0);
+                      sendBmadChat("C").catch((e) => setBmadStatus(e?.message || "Failed"));
                     }}
                     title="BMAD continue"
                   >
@@ -624,8 +627,7 @@ export default function HomePage() {
                     type="button"
                     disabled={bmadSession?.step?.kind !== "bmad_steps"}
                     onClick={() => {
-                      setBmadChatInput("Modify");
-                      setTimeout(() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed")), 0);
+                      sendBmadChat("Modify").catch((e) => setBmadStatus(e?.message || "Failed"));
                     }}
                     title="BMAD modify scope"
                   >
