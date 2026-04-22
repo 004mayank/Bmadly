@@ -717,9 +717,32 @@ export default function HomePage() {
 
                 {bmadSession?.step?.kind === "bmad_steps" ? (
                   (() => {
-                    const docTypes = ["market-research", "domain-research", "technical-research"];
-                    const doc = bmadSession.artifacts.find((a) => docTypes.includes(a.type));
+                    const typeBySkill: Record<string, string> = {
+                      "bmad-market-research": "market-research",
+                      "bmad-domain-research": "domain-research",
+                      "bmad-technical-research": "technical-research"
+                    };
+                    const wantType = bmadSession.activeSkillId ? typeBySkill[bmadSession.activeSkillId] : undefined;
+                    const doc = wantType
+                      ? bmadSession.artifacts.find((a) => a.type === wantType)
+                      : bmadSession.artifacts.find((a) =>
+                          ["market-research", "domain-research", "technical-research"].includes(a.type)
+                        );
                     if (!doc) return null;
+
+                    const filename = `${doc.type}.md`;
+                    const download = () => {
+                      const blob = new Blob([doc.content], { type: "text/markdown;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = filename;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    };
+
                     return (
                       <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
                         <div className="muted" style={{ fontSize: 12 }}>
@@ -728,13 +751,18 @@ export default function HomePage() {
                         <div style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                             <div style={{ fontSize: 12, opacity: 0.8 }}>{doc.title || "market-research"}</div>
-                            <button
-                              className="btnSecondary"
-                              type="button"
-                              onClick={() => navigator.clipboard.writeText(doc.content).catch(() => {})}
-                            >
-                              Copy
-                            </button>
+                            <div className="row" style={{ gap: 8 }}>
+                              <button
+                                className="btnSecondary"
+                                type="button"
+                                onClick={() => navigator.clipboard.writeText(doc.content).catch(() => {})}
+                              >
+                                Copy
+                              </button>
+                              <button className="btnSecondary" type="button" onClick={download}>
+                                Download
+                              </button>
+                            </div>
                           </div>
                           <div className="output" style={{ marginTop: 8, maxHeight: 260, overflow: "auto" }}>
                             {doc.content}

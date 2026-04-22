@@ -176,11 +176,11 @@ export async function advanceSession(params: {
         .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
         .join("\n");
 
-      // Step-based doc handling (first implementation: market research).
+      // Step-based doc handling: explicit mapping for research skills.
       const artifactType =
-        active.id.includes("market-research") ? "market-research" :
-        active.id.includes("domain-research") ? "domain-research" :
-        active.id.includes("technical-research") ? "technical-research" :
+        active.id === "bmad-market-research" ? "market-research" :
+        active.id === "bmad-domain-research" ? "domain-research" :
+        active.id === "bmad-technical-research" ? "technical-research" :
         `${active.id}-doc`;
       const existingDoc = session.stepContext?.docContent || "";
       const system =
