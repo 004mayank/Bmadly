@@ -94,5 +94,41 @@ export const PipelineStore = {
     const r = runs.get(runId);
     if (!r) return;
     r.version += 1;
+  },
+
+  upsertBmadArtifact(runId: string, artifact: { id: string; type: string; title?: string; content: string; createdAt: number }) {
+    const r = runs.get(runId);
+    if (!r) return;
+    if (!r.result) {
+      // Create a minimal result container if pipeline hasn't finished yet.
+      r.result = {
+        status: r.status === "failed" ? "failed" : "running",
+        version: r.version,
+        plan: {
+          idea: "",
+          features: [],
+          techStack: { frontend: "", backend: "", execution: "" },
+          architecture: { notes: [] }
+        },
+        tasks: [],
+        build: { bmad: { command: "", env: {} } },
+        artifacts: {}
+      };
+    }
+    if (!r.result.artifacts) r.result.artifacts = {};
+    if (!r.result.artifacts.bmad) r.result.artifacts.bmad = [];
+
+    const arr = r.result.artifacts.bmad;
+    const idx = arr.findIndex((a) => a.id === artifact.id);
+    const rec = {
+      id: artifact.id,
+      type: artifact.type,
+      title: artifact.title,
+      contentType: "text/markdown",
+      content: artifact.content,
+      createdAt: artifact.createdAt
+    };
+    if (idx >= 0) arr[idx] = rec;
+    else arr.push(rec);
   }
 };

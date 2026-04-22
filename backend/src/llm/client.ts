@@ -24,7 +24,57 @@ export async function llmJson<T>(params: {
   if (config.provider === "anthropic") {
     return anthropicJson<T>({ apiKey: config.apiKey, model: config.model, system, user, schemaHint });
   }
+  if (config.provider === "gemini") {
+    return geminiJson<T>({ apiKey: config.apiKey, model: config.model, system, user, schemaHint });
+  }
   throw new Error(`Unsupported provider: ${config.provider}`);
+}
+
+async function geminiJson<T>(params: {
+  apiKey: string;
+  model: string;
+  system: string;
+  user: string;
+  schemaHint?: string;
+}): Promise<T> {
+  const { apiKey, model, system, user, schemaHint } = params;
+
+  // Gemini API (v1beta) generateContent.
+  // We instruct strict JSON output and parse the returned text.
+  const prompt = schemaHint ? `${user}\n\nJSON schema hint:\n${schemaHint}` : user;
+
+  const body: any = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: `${system}\n\n${prompt}` }]
+      }
+    ],
+    generationConfig: {
+      responseMimeType: "application/json"
+    }
+  };
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!resp.ok) {
+    const t = await resp.text().catch(() => "");
+    throw new Error(`Gemini error ${resp.status}: ${t.slice(0, 500)}`);
+  }
+
+  const json: any = await resp.json();
+  const text =
+    json?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text ?? "").join("") ?? "";
+  if (!text) throw new Error("Gemini returned empty output");
+  const parsed = JSON.parse(text);
+  return parsed as T;
 }
 
 async function openaiJson<T>(params: {
@@ -115,4 +165,3 @@ async function anthropicJson<T>(params: {
   const parsed = JSON.parse(text.slice(start, end + 1));
   return parsed as T;
 }
-

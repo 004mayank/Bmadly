@@ -13,10 +13,23 @@ type RunState =
   | { status: "done"; runId: string; finalStatus: "succeeded" | "failed" }
   | { status: "error"; message: string };
 
+type BmadMenuItem = { code: string; description: string; skill?: string; prompt?: string };
+type BmadChatMessage = { role: "user" | "assistant"; text: string; ts: number };
+type BmadSession = {
+  id: string;
+  runId: string;
+  agentSkillId?: string;
+  activeSkillId?: string;
+  messages: BmadChatMessage[];
+  artifacts: Array<{ id: string; type: string; title?: string; content: string; createdAt: number }>;
+};
+
 export default function HomePage() {
   const [provider, setProvider] = useState<ProviderId>("openai");
   const [model, setModel] = useState("gpt-4o-mini");
-  const [useOwnKey, setUseOwnKey] = useState(false);
+  // Default to BYOK for best UX.
+  // Note: BMAD Chat currently requires BYOK.
+  const [useOwnKey, setUseOwnKey] = useState(true);
   const [apiKey, setApiKey] = useState("");
   const [idea, setIdea] = useState("");
 
@@ -27,9 +40,19 @@ export default function HomePage() {
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [analysisMd, setAnalysisMd] = useState<string>("");
   const [prdMd, setPrdMd] = useState<string>("");
+  const [bmadArtifactsFromRun, setBmadArtifactsFromRun] = useState<
+    Array<{ id: string; type: string; title?: string; contentType: string; content: string; createdAt: number }>
+  >([]);
   const [runState, setRunState] = useState<RunState>({ status: "idle" });
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedSec, setElapsedSec] = useState<number>(0);
+
+  // --- BMAD Chat state (attached to current runId) ---
+  const [bmadSession, setBmadSession] = useState<BmadSession | null>(null);
+  const [bmadMenu, setBmadMenu] = useState<BmadMenuItem[] | null>(null);
+  const [bmadChatInput, setBmadChatInput] = useState<string>("");
+  const [bmadStatus, setBmadStatus] = useState<string>("");
+  const [bmadAgentSkillId, setBmadAgentSkillId] = useState<string>("bmad-agent-analyst");
 
   const terminalRef = useRef<HTMLDivElement | null>(null);
 
@@ -60,9 +83,125 @@ export default function HomePage() {
     setPreviewUrl("");
     setAnalysisMd("");
     setPrdMd("");
+    setBmadArtifactsFromRun([]);
     setRunState({ status: "idle" });
     setStartedAt(null);
     setElapsedSec(0);
+
+    setBmadSession(null);
+    setBmadMenu(null);
+    setBmadChatInput("");
+    setBmadStatus("");
+  }
+
+  async function ensureBmadSessionForRun(runId: string) {
+    if (bmadSession?.runId === runId) return bmadSession;
+    setBmadStatus("Creating BMAD session…");
+
+    // Prefer resuming the most recent existing session for this run.
+    const list = await fetch(`${API_BASE_URL}/api/bmad/sessions?runId=${encodeURIComponent(runId)}`);
+    if (list.ok) {
+      const lj = await list.json().catch(() => null);
+      const sessions = (lj?.sessions ?? []) as BmadSession[];
+      if (sessions.length) {
+        setBmadSession(sessions[0]);
+        setBmadStatus("Resumed BMAD session");
+        return sessions[0];
+      }
+    }
+
+    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ runId })
+    });
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j?.error || `Failed to create BMAD session (${resp.status})`);
+    }
+    const j = await resp.json();
+    setBmadSession(j.session as BmadSession);
+    setBmadStatus("BMAD session ready");
+    return j.session as BmadSession;
+  }
+
+  async function startBmadAgent() {
+    if (!currentRunId) {
+      setBmadStatus("Run the pipeline once to get a runId, then start BMAD chat.");
+      return;
+    }
+    // For BMAD chat: require BYOK for now.
+    if (apiKey.trim().length < 8) {
+      setBmadStatus("Enter your API key to start BMAD chat.");
+      return;
+    }
+    const s = await ensureBmadSessionForRun(currentRunId);
+
+    setBmadStatus("Starting agent…");
+    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: s.id,
+        agentSkillId: bmadAgentSkillId,
+        provider,
+        model,
+        apiKey
+      })
+    });
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j?.error || `Failed to start agent (${resp.status})`);
+    }
+    const j = await resp.json();
+    setBmadMenu(j.menu as BmadMenuItem[]);
+    setBmadSession(j.session as BmadSession);
+    setBmadStatus("Agent started");
+  }
+
+  async function selectBmadSkill(skillId: string) {
+    if (!bmadSession) return;
+    setBmadStatus(`Selected ${skillId}`);
+    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/select-skill`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: bmadSession.id, skillId })
+    });
+    const j = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(j?.error || `Failed to select skill (${resp.status})`);
+    setBmadSession(j.session as BmadSession);
+  }
+
+  async function sendBmadChat() {
+    if (!bmadSession) {
+      setBmadStatus("Start an agent first.");
+      return;
+    }
+    const msg = bmadChatInput.trim();
+    if (!msg) return;
+
+    if (apiKey.trim().length < 8) {
+      setBmadStatus("Enter your API key to chat.");
+      return;
+    }
+
+    setBmadChatInput("");
+    setBmadStatus("Thinking…");
+    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/message`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        sessionId: bmadSession.id,
+        message: msg,
+        provider,
+        model,
+        apiKey
+      })
+    });
+    const j = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(j?.error || `BMAD message failed (${resp.status})`);
+    setBmadSession(j.session as BmadSession);
+    setBmadStatus("Ready");
   }
 
   async function startRun() {
@@ -141,6 +280,7 @@ export default function HomePage() {
       const result = j?.result;
       if (result?.artifacts?.analysis?.content) setAnalysisMd(String(result.artifacts.analysis.content));
       if (result?.artifacts?.prd?.content) setPrdMd(String(result.artifacts.prd.content));
+      if (Array.isArray(result?.artifacts?.bmad)) setBmadArtifactsFromRun(result.artifacts.bmad);
       if (result?.plan) setPlanJson(JSON.stringify(result.plan, null, 2));
       if (result?.review) setReviewText(JSON.stringify(result.review, null, 2));
       // live preview URL may be absolute (http://localhost:PORT)
@@ -254,17 +394,17 @@ export default function HomePage() {
               <input
                 type="checkbox"
                 checked={useOwnKey}
-                disabled={isRunning}
-                onChange={(e) => setUseOwnKey(e.target.checked)}
+                disabled={true}
+                onChange={() => {}}
                 style={{ marginRight: 8 }}
               />
-              Use my own API key
+              API key (required)
             </label>
           </div>
 
           {useOwnKey && (
             <>
-              <label className="label">API Key (sent to backend for this run only)</label>
+              <label className="label">API Key</label>
               <input
                 className="input"
                 type="password"
@@ -274,7 +414,7 @@ export default function HomePage() {
                 placeholder="sk-…"
               />
               <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                Keys are not persisted. Managed keys (env vars) are never exposed to the browser.
+                Key is used to call the selected LLM provider and is not stored.
               </div>
             </>
           )}
@@ -381,6 +521,142 @@ export default function HomePage() {
 
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
+            <div>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">BMAD Chat (WIP)</div>
+                <div className="muted" style={{ fontSize: 12 }}>
+                  {bmadStatus || ""}
+                </div>
+              </div>
+
+              <div className="output" style={{ display: "grid", gap: 10 }}>
+                <div className="row" style={{ flexWrap: "wrap" }}>
+                  <select
+                    className="select"
+                    value={bmadAgentSkillId}
+                    onChange={(e) => setBmadAgentSkillId(e.target.value)}
+                    disabled={!currentRunId}
+                    title="BMAD agent skill id"
+                  >
+                    <option value="bmad-agent-analyst">Mary (Analyst)</option>
+                    <option value="bmad-agent-pm">PM</option>
+                    <option value="bmad-agent-ux-designer">UX Designer</option>
+                    <option value="bmad-agent-architect">Architect</option>
+                    <option value="bmad-agent-dev">Dev</option>
+                    <option value="bmad-agent-tech-writer">Tech Writer</option>
+                  </select>
+
+                  <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))} disabled={!currentRunId}>
+                    Start agent
+                  </button>
+                </div>
+
+                {bmadMenu && bmadMenu.length > 0 && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Menu
+                    </div>
+                    <div className="row" style={{ flexWrap: "wrap" }}>
+                      {bmadMenu.map((m) => (
+                        <button
+                          key={m.code}
+                          className="btnSecondary"
+                          type="button"
+                          onClick={() => {
+                            if (m.skill) selectBmadSkill(m.skill).catch((e) => setBmadStatus(e?.message || "Failed"));
+                          }}
+                          title={m.skill || m.prompt || ""}
+                        >
+                          {m.code}: {m.description}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid #1f2937", borderRadius: 14, padding: 12, background: "#0b1020" }}>
+                  {!bmadSession || bmadSession.messages.length === 0 ? (
+                    <div className="terminalLineDim">(start an agent to begin chatting)</div>
+                  ) : (
+                    bmadSession.messages.map((m, idx) => (
+                      <div key={idx} className={m.role === "assistant" ? "terminalLine" : "terminalLineWarn"}>
+                        <span style={{ opacity: 0.7 }}>{m.role === "assistant" ? "assistant" : "you"}:</span> {m.text}
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="row">
+                  <input
+                    className="input"
+                    value={bmadChatInput}
+                    onChange={(e) => setBmadChatInput(e.target.value)}
+                    placeholder="Type your reply…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        sendBmadChat().catch((err) => setBmadStatus(err?.message || "Failed"));
+                      }
+                    }}
+                  />
+                  <button className="btnPrimary" type="button" onClick={() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed"))}>
+                    Send
+                  </button>
+                </div>
+
+                {bmadSession?.artifacts?.length ? (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      Artifacts
+                    </div>
+                    {bmadSession.artifacts.map((a) => (
+                      <div key={a.id} style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontSize: 12, opacity: 0.8 }}>{a.type}{a.title ? ` — ${a.title}` : ""}</div>
+                          <button
+                            className="btnSecondary"
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(a.content).catch(() => {})}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <div className="output" style={{ marginTop: 8 }}>{a.content}</div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {bmadArtifactsFromRun.length ? (
+                  <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                    <div className="muted" style={{ fontSize: 12 }}>
+                      BMAD Artifacts (attached to run)
+                    </div>
+                    {bmadArtifactsFromRun.map((a) => (
+                      <div key={a.id} style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                          <div style={{ fontSize: 12, opacity: 0.8 }}>
+                            {a.type}
+                            {a.title ? ` — ${a.title}` : ""}
+                          </div>
+                          <button
+                            className="btnSecondary"
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(a.content).catch(() => {})}
+                          >
+                            Copy
+                          </button>
+                        </div>
+                        <div className="output" style={{ marginTop: 8 }}>
+                          {a.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
             <div>
               <div className="sectionTitle">
                 <div className="sectionTitleText">Analysis</div>

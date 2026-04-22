@@ -46,6 +46,9 @@ export type PipelineResult = {
     tasks?: { contentType: string; content: string };
     dev?: { contentType: string; content: string };
     review?: { contentType: string; content: string };
+
+    // BMAD interactive chat artifacts (product brief, research, PRFAQ, etc.)
+    bmad?: Array<{ id: string; type: string; title?: string; contentType: string; content: string; createdAt: number }>;
   };
   review?: {
     summary: string;
