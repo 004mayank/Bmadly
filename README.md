@@ -15,10 +15,15 @@ This repo contains:
 ## MVP Features
 - Single-page UI
   - Provider + model selection
-  - BYOK toggle + API key input
+  - API key input (BYOK required in UI)
   - Run button
   - Real-time log streaming
   - Final output viewer
+- BMAD Chat (WIP)
+  - Pick an agent (e.g. Mary/Analyst) and run BMAD-style interactive flows in a chatbox
+  - Step-based skills (e.g. market research) support Continue/Modify + step progress
+  - Sessions are persisted to disk and can be resumed per run
+  - BMAD artifacts are attached to the run result under `result.artifacts.bmad[]`
 - Backend API
   - `POST /api/run` start a run
   - `GET /api/run/:runId/stream` stream logs/events (SSE)
@@ -57,15 +62,60 @@ Preview containers are automatically cleaned up after ~10 minutes.
 ## Managed mode vs BYOK mode
 
 ### Managed mode
-- User leaves **“Use my own API key”** OFF.
-- Backend uses environment variables:
+- Backend can use environment variables for pipeline runs:
   - `OPENAI_API_KEY`
   - `ANTHROPIC_API_KEY`
+  - `GEMINI_API_KEY`
+
+Note: the current UI defaults to (and enforces) BYOK for simplicity.
 
 ### BYOK mode
-- User turns **“Use my own API key”** ON.
-- User selects provider + model and enters an API key.
-- Backend uses the provided key **only for that run** (not persisted).
+- User enters an API key.
+- Backend uses the provided key for API calls (not persisted).
+
+## BMAD Chat (interactive)
+
+The right-hand panel includes a **BMAD Chat (WIP)** mode that uses the vendored BMAD Method content (`bmad/BMAD-METHOD`) to run interactive agent flows.
+
+### What it supports today
+- Start an agent (e.g. `bmad-agent-analyst`)
+- Render the agent menu from `customize.toml`
+- Select a skill from the menu
+- Step-based skills (`steps/step-*.md`) run as a guided flow:
+  - Continue is gated on `C` (UI has a Continue button)
+  - Step progress is shown (step X/Y)
+  - A persistent document artifact is maintained with YAML frontmatter (`stepsCompleted`, `updatedAt`)
+
+### Persistence
+- BMAD sessions are stored under:
+  - `.bmadly/bmad-sessions/<runId>/<sessionId>.json`
+
+### Debugging
+- `GET /api/bmad/sessions/:sessionId/debug` returns the active skill, step index, resolved step file, and document artifact pointer.
+
+### Starting BMAD Chat without running the pipeline
+BMAD Chat can create a run id on-demand:
+- `POST /api/pipeline/create`
+
+## API reference (summary)
+
+### Pipeline
+- `POST /api/pipeline/create` (create runId only)
+- `POST /api/pipeline/run`
+- `GET /api/pipeline/run/:runId/stream` (SSE)
+- `GET /api/pipeline/run/:runId/result`
+- `POST /api/pipeline/iterate`
+
+### BMAD
+- `GET /api/bmad/status`
+- `GET /api/bmad/skills`
+- `GET /api/bmad/skills/:id`
+- `POST /api/bmad/sessions`
+- `GET /api/bmad/sessions?runId=...`
+- `POST /api/bmad/sessions/start`
+- `POST /api/bmad/sessions/select-skill`
+- `POST /api/bmad/sessions/message`
+- `GET /api/bmad/sessions/:sessionId/debug`
 
 ## Local setup
 
@@ -148,6 +198,7 @@ If your real BMAD writes output elsewhere, update the generator step to emit int
 - No auth / no multi-user
 - Not hardened for untrusted code execution
 - Mock BMAD runner by default
+- BMAD Chat is early/WIP; execution is partially enforced for step-based skills and will be expanded skill-by-skill
 
 ## Future roadmap (not in MVP)
 - Real BMAD runtime baked into runner image
