@@ -93,13 +93,70 @@ export async function advanceSession(params: {
 
   const llm: LlmConfig = { provider, model, apiKey };
 
-  // v1: if active skill has prompts/guided-elicitation.md, run guided Q/A.
+  // v2 (partial): if active skill has steps/step-*.md, run deterministic step runner.
+  // v1: otherwise, if prompts/guided-elicitation.md exists, run guided Q/A.
   // Otherwise, generic chat response.
   const repoRoot = getRepoRoot();
   const skillsRoot = getBmadSkillsRoot();
   const skills = loadBmadSkills({ skillsRoot, repoRoot });
 
   const active = session.activeSkillId ? findSkill(skills, session.activeSkillId) : null;
+
+  // Step-runner (supports bmad-market-research and similar).
+  if (active) {
+    const stepsDir = path.join(active.absDir, "steps");
+    if (fs.existsSync(stepsDir) && fs.statSync(stepsDir).isDirectory()) {
+      const stepFiles = fs
+        .readdirSync(stepsDir)
+        .filter((f) => /^step-\d+-.+\.md$/.test(f))
+        .sort();
+
+      const total = stepFiles.length;
+      const currentIndex = session.step?.kind === "bmad_steps" ? session.step.index : 1;
+      const currentFile = stepFiles[Math.max(0, Math.min(total - 1, currentIndex - 1))];
+      const stepMd = fs.readFileSync(path.join(stepsDir, currentFile), "utf8");
+
+      // Gate: only advance to next step when user explicitly confirms with "C".
+      const wantsContinue = /^\s*c\s*$/i.test(userMessage.trim());
+      const shouldAdvance = wantsContinue && currentIndex < total;
+      const nextIndex = shouldAdvance ? currentIndex + 1 : currentIndex;
+      session.step = { kind: "bmad_steps", index: nextIndex, total };
+
+      // Use LLM to produce the assistant's response for the *current* step file.
+      // If user typed C, we will respond with the *next* step's opening prompt.
+      const effectiveIndex = nextIndex;
+      const effectiveFile = stepFiles[Math.max(0, Math.min(total - 1, effectiveIndex - 1))];
+      const effectiveMd = fs.readFileSync(path.join(stepsDir, effectiveFile), "utf8");
+
+      const history = session.messages
+        .slice(-20)
+        .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
+        .join("\n");
+
+      const system =
+        (session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +
+        `You are executing BMAD skill ${active.id} as a step-by-step workflow inside a chat UI. ` +
+        `You MUST follow the step file instructions EXACTLY. Ask one question at a time. ` +
+        `If the step says HALT, you must stop after presenting choices and wait for the user's next message. ` +
+        `\n\nCURRENT STEP FILE (authoritative):\n\n${effectiveMd}`;
+
+      const user = `Conversation so far:\n${history}\n\nLatest user message:\n${userMessage}`;
+
+      const r = await llmJson<{
+        text: string;
+        artifact: null | { type: string; title?: string | null; content: string };
+      }>({
+        config: llm,
+        system,
+        user,
+        schemaHint:
+          `{ "text": "string", "artifact": null | { "type": "string", "title": "string?", "content": "string" } }`
+      });
+
+      return r;
+    }
+  }
+
   const guidedPath = active ? path.join(active.absDir, "prompts", "guided-elicitation.md") : null;
   const guided = guidedPath && fs.existsSync(guidedPath) ? fs.readFileSync(guidedPath, "utf8") : null;
 

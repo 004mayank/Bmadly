@@ -145,6 +145,7 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
   session.activeSkillId = skillId;
+  // Reset step state for the selected skill; step runner will take over if skill has steps/.
   session.step = { kind: "chat", index: 0 };
   BmadSessionStore.save(session);
   res.json({ ok: true, session });
