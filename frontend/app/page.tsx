@@ -677,8 +677,34 @@ export default function HomePage() {
                     Download .md
                   </button>
 
-                  <button className="btnSecondary" type="button" disabled title="PDF export coming next">
-                    Download .pdf (next)
+                  <button
+                    className="btnSecondary"
+                    type="button"
+                    disabled={!prdMd && !analysisMd && !output}
+                    onClick={async () => {
+                      const markdown = prdMd || analysisMd || output || "";
+                      const title = prdMd ? "prd" : analysisMd ? "analysis" : "bmadly-output";
+                      const r = await fetch(`${API_BASE_URL}/api/export/pdf`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ markdown, title })
+                      });
+                      if (!r.ok) {
+                        const j = await r.json().catch(() => ({}));
+                        throw new Error(j?.error || `PDF export failed (${r.status})`);
+                      }
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${title}.pdf`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Download .pdf
                   </button>
                 </div>
               </section>
