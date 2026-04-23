@@ -12,6 +12,10 @@ import { RunsStore } from "../store/runsStore.js";
 import { runtimeFetch } from "../execution/runtimeProxy.js";
 import { RuntimeAuthStore } from "../runtime/runtimeAuth.js";
 
+function isRuntimeContainerBackend() {
+  return String(process.env.PORT || "") === "8080";
+}
+
 export const bmadRouter = Router();
 
 // Simple read-only endpoints first: status + list skills.
@@ -193,24 +197,23 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
-  // In-container runtime mode: if this backend is running inside the per-run container,
-  // we expect a runtime auth handshake and do not require apiKey per request.
-  if (process.env.PORT === "8080") {
+  // In-container runtime mode: expect a runtime auth handshake and do not require apiKey per request.
+  if (isRuntimeContainerBackend()) {
     const a = RuntimeAuthStore.get();
     if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
   }
 
-  // If a per-run runtime container exists, proxy chat to it.
+  // Host mode: proxy to the per-run runtime container backend.
   const run = RunsStore.get(session.runId);
-  if (run?.runtime?.hostPort) {
+  if (!isRuntimeContainerBackend() && run?.runtime?.hostPort) {
     try {
       const j = await runtimeFetch({
         hostPort: run.runtime.hostPort,
-        path: "/bmad/sessions/start",
+        path: "/api/bmad/sessions/start",
         method: "POST",
-        body: { agentSkillId, provider, model }
+        body: req.body
       });
-      return res.json({ ...j, primaryArtifactId: null });
+      return res.json(j);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
     }
@@ -250,11 +253,16 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
   if (!session) return res.status(404).json({ error: "Session not found" });
 
   const run = RunsStore.get(session.runId);
-  if (run?.runtime?.hostPort) {
-    runtimeFetch({ hostPort: run.runtime.hostPort, path: "/bmad/sessions/select-skill", method: "POST", body: { skillId } })
-      .then((j) => res.json({ ...j, primaryArtifactId: null }))
+  if (!isRuntimeContainerBackend() && run?.runtime?.hostPort) {
+    runtimeFetch({ hostPort: run.runtime.hostPort, path: "/api/bmad/sessions/select-skill", method: "POST", body: req.body })
+      .then((j) => res.json(j))
       .catch((e: any) => res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` }));
     return;
+  }
+
+  if (isRuntimeContainerBackend()) {
+    const a = RuntimeAuthStore.get();
+    if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
   }
   session.activeSkillId = skillId;
   // Reset step state for the selected skill; step runner will take over if skill has steps/.
@@ -283,21 +291,21 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
-  if (process.env.PORT === "8080") {
+  if (isRuntimeContainerBackend()) {
     const a = RuntimeAuthStore.get();
     if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
   }
 
   const run = RunsStore.get(session.runId);
-  if (run?.runtime?.hostPort) {
+  if (!isRuntimeContainerBackend() && run?.runtime?.hostPort) {
     try {
       const j = await runtimeFetch({
         hostPort: run.runtime.hostPort,
-        path: "/bmad/sessions/message",
+        path: "/api/bmad/sessions/message",
         method: "POST",
-        body: { message, provider, model }
+        body: req.body
       });
-      return res.json({ ...j, primaryArtifactId: null });
+      return res.json(j);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
     }
