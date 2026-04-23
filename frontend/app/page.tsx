@@ -28,6 +28,17 @@ type BmadSession = {
   primaryArtifactId?: string | null;
 };
 
+type BmadAgent = { id: string; label: string; title?: string };
+
+const BMAD_METHOD_AGENTS: BmadAgent[] = [
+  { id: "bmad-agent-analyst", label: "Mary", title: "Analyst" },
+  { id: "bmad-agent-pm", label: "John", title: "Product Manager" },
+  { id: "bmad-agent-ux-designer", label: "Sally", title: "UX Designer" },
+  { id: "bmad-agent-architect", label: "Winston", title: "System Architect" },
+  { id: "bmad-agent-dev", label: "Amelia", title: "Developer" },
+  { id: "bmad-agent-tech-writer", label: "Paige", title: "Tech Writer" }
+];
+
 export default function HomePage() {
   const [provider, setProvider] = useState<ProviderId>("openai");
   const [model, setModel] = useState("gpt-4o-mini");
@@ -640,12 +651,11 @@ export default function HomePage() {
                     disabled={!currentRunId}
                     title="BMAD agent skill id"
                   >
-                    <option value="bmad-agent-analyst">Mary (Analyst)</option>
-                    <option value="bmad-agent-pm">PM</option>
-                    <option value="bmad-agent-ux-designer">UX Designer</option>
-                    <option value="bmad-agent-architect">Architect</option>
-                    <option value="bmad-agent-dev">Dev</option>
-                    <option value="bmad-agent-tech-writer">Tech Writer</option>
+                    {BMAD_METHOD_AGENTS.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}{a.title ? ` (${a.title})` : ""}
+                      </option>
+                    ))}
                   </select>
 
                   <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))}>
