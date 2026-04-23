@@ -376,30 +376,22 @@ export default function HomePage() {
   }, [elapsedSec]);
 
   return (
-    <main className="container">
-      <header style={{ marginBottom: 16 }}>
-        <h1>Bmadly</h1>
-        <p className="sub">browser-based BMAD execution</p>
-      </header>
+    <main className="containerFull">
 
       <div className="appShell">
         <aside className="leftRail">
           <div className="brandRow">
-            <div className="brandMark" />
             <div>
-              <div className="brandName">BMADly</div>
-              <div className="brandSub">BMAD Method control UI</div>
+              <div className="brandName" style={{ fontSize: 22, letterSpacing: 0.2 }}>BMADly</div>
             </div>
           </div>
 
-          <div className="navSectionTitle">Workspace</div>
-          <button
-            className={`navItem ${activeView === "environment" ? "navItemActive" : ""}`}
-            type="button"
-            onClick={() => setActiveView("environment")}
-          >
+          <div className="railBlock">
+            <div className="railBlockTitle">MISSION_CONTROL</div>
+            <div className="railBlockSub">v0.1.0</div>
+          </div>
+          <button className={`navItem ${activeView === "environment" ? "navItemActive" : ""}`} type="button" onClick={() => setActiveView("environment")}>
             <span>Environment</span>
-            <span className="muted" style={{ fontSize: 12 }}>{isRunning ? "running" : "setup"}</span>
           </button>
           <button
             className={`navItem ${activeView === "agents" ? "navItemActive" : ""} ${!currentRunId ? "navItemDisabled" : ""}`}
@@ -408,7 +400,6 @@ export default function HomePage() {
             onClick={() => currentRunId && setActiveView("agents")}
           >
             <span>Agent Chat</span>
-            <span className="muted" style={{ fontSize: 12 }}>{currentRunId ? "ready" : "locked"}</span>
           </button>
           <button
             className={`navItem ${activeView === "export" ? "navItemActive" : ""} ${!currentRunId ? "navItemDisabled" : ""}`}
@@ -423,35 +414,115 @@ export default function HomePage() {
         <div>
           <div className="topBar">
             <div className="tabsRow">
-              <div className="tab tabActive">Execution</div>
-              <div className="tab">Analytics</div>
-              <div className="tab">Models</div>
+              <div className="tab tabActive">EXECUTION</div>
+              <div className="tab">ANALYTICS</div>
+              <div className="tab">MODELS</div>
             </div>
 
             <div className="row" style={{ justifyContent: "flex-end" }}>
-              <div className="badge" title="Runtime auth status">
+              <div className="chip">
                 <span className={currentRunId ? "ok" : "muted"}>●</span>
-                <span style={{ fontWeight: 700, fontSize: 12 }}>System Ready</span>
+                <span>System Ready</span>
               </div>
-              {currentRunId && (
-                <div className="badge" title={currentRunId}>
-                  <span className="muted">runId</span>
-                  <span style={{ fontSize: 12, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {currentRunId}
-                  </span>
-                </div>
-              )}
-              {isRunning && (
-                <div className="badge">
-                  <span className="muted">elapsed</span>
-                  <span style={{ fontSize: 12 }}>{elapsedLabel}</span>
-                </div>
-              )}
-              <button className="btnSecondary" type="button" onClick={clearPanels} disabled={isRunning}>
-                Clear
+              <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 12, marginRight: 10 }}>Latency: 24ms</div>
+              <button className="btnRun" type="button" onClick={startRun} disabled={isRunning}>
+                RUN BMAD
               </button>
             </div>
           </div>
+
+          {activeView === "environment" ? (
+            <div style={{ padding: "0 22px 22px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div>
+                  <div className="pageTitle">Environment Setup</div>
+                  <p className="pageSubtitle">Initialize your model orchestration parameters to begin execution.</p>
+                </div>
+                <div className="row" style={{ gap: 12 }}>
+                  <div className="chip">
+                    <span className={currentRunId ? "ok" : "muted"}>●</span>
+                    <span>System Ready</span>
+                  </div>
+                  <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 12 }}>Latency: 24ms</div>
+                </div>
+              </div>
+
+              <div className="cards2" style={{ marginTop: 16 }}>
+                <section className="card">
+                  <div className="cardTitle">
+                    <div className="cardTitleText">GLOBAL CONFIGURATION</div>
+                  </div>
+
+                  <div className="split2">
+                    <div>
+                      <label className="label">LLM Provider</label>
+                      <select className="select" value={provider} onChange={(e) => setProvider(e.target.value as ProviderId)} disabled={isRunning}>
+                        {PROVIDERS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="label">Model Version</label>
+                      <select className="select" value={model} onChange={(e) => setModel(e.target.value)} disabled={isRunning}>
+                        {providerConfig.models.map((m) => (
+                          <option key={m} value={m}>
+                            {m}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <label className="label">API Key</label>
+                  <input className="input" type="password" value={apiKey} disabled={isRunning} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-…" />
+                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+                    Keys are encrypted locally and never stored on our servers.
+                  </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+                    <button className="btnRun" type="button" onClick={startRun} disabled={isRunning}>
+                      RUN BMAD EXECUTION
+                    </button>
+                  </div>
+                </section>
+
+                <div style={{ display: "grid", gap: 16 }}>
+                  <section className="card">
+                    <div className="cardTitle">
+                      <div className="cardTitleText">Setup Guide</div>
+                    </div>
+                    <div className="muted" style={{ lineHeight: 1.6 }}>
+                      New to BMAD? Follow the quickstart guide to calibrate your agents.
+                    </div>
+                    <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+                      <span className="badge">CORE-V2</span>
+                      <span className="badge">RUNTIME</span>
+                    </div>
+                  </section>
+
+                  <section className="card">
+                    <div className="cardTitle">
+                      <div className="cardTitleText">INFRASTRUCTURE</div>
+                    </div>
+                    <div className="row" style={{ justifyContent: "space-between" }}>
+                      <div className="muted">Primary Node</div>
+                      <div className="ok" style={{ fontFamily: "var(--mono)", fontSize: 12, fontWeight: 800 }}>ONLINE</div>
+                    </div>
+                    <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.06)", marginTop: 10, overflow: "hidden" }}>
+                      <div style={{ width: "78%", height: "100%", background: "rgba(59,130,246,0.9)" }} />
+                    </div>
+                    <div className="row" style={{ justifyContent: "space-between", marginTop: 14 }}>
+                      <div className="muted">Inference Load</div>
+                      <div style={{ fontFamily: "var(--mono)", fontSize: 12 }}>12.4%</div>
+                    </div>
+                  </section>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {activeView === "environment" ? (
             <div className="cards2">
