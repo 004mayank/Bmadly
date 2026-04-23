@@ -23,6 +23,9 @@ type BmadSession = {
   step?: { kind: string; index: number; total?: number };
   messages: BmadChatMessage[];
   artifacts: Array<{ id: string; type: string; title?: string; content: string; createdAt: number }>;
+  // Canonical "current document" pointer (preferred).
+  // Provided by backend on session responses.
+  primaryArtifactId?: string | null;
 };
 
 export default function HomePage() {
@@ -169,7 +172,10 @@ export default function HomePage() {
     }
     const j = await resp.json();
     setBmadMenu(j.menu as BmadMenuItem[]);
-    setBmadSession(j.session as BmadSession);
+    setBmadSession({
+      ...(j.session as BmadSession),
+      primaryArtifactId: (j as any).primaryArtifactId ?? (j.session as any).primaryArtifactId ?? null
+    });
     setBmadStatus("Agent started");
   }
 
@@ -183,7 +189,10 @@ export default function HomePage() {
     });
     const j = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(j?.error || `Failed to select skill (${resp.status})`);
-    setBmadSession(j.session as BmadSession);
+    setBmadSession({
+      ...(j.session as BmadSession),
+      primaryArtifactId: (j as any).primaryArtifactId ?? (j.session as any).primaryArtifactId ?? null
+    });
   }
 
   async function sendBmadChat(overrideMessage?: string) {
@@ -214,7 +223,10 @@ export default function HomePage() {
     });
     const j = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(j?.error || `BMAD message failed (${resp.status})`);
-    setBmadSession(j.session as BmadSession);
+    setBmadSession({
+      ...(j.session as BmadSession),
+      primaryArtifactId: (j as any).primaryArtifactId ?? (j.session as any).primaryArtifactId ?? null
+    });
     if (bmadDebugOpen) {
       fetchBmadDebug((j.session as BmadSession).id).catch(() => {});
     }
@@ -717,17 +729,21 @@ export default function HomePage() {
 
                 {bmadSession?.step?.kind === "bmad_steps" ? (
                   (() => {
-                    const typeBySkill: Record<string, string> = {
-                      "bmad-market-research": "market-research",
-                      "bmad-domain-research": "domain-research",
-                      "bmad-technical-research": "technical-research"
-                    };
-                    const wantType = bmadSession.activeSkillId ? typeBySkill[bmadSession.activeSkillId] : undefined;
-                    const doc = wantType
-                      ? bmadSession.artifacts.find((a) => a.type === wantType)
-                      : bmadSession.artifacts.find((a) =>
-                          ["market-research", "domain-research", "technical-research"].includes(a.type)
-                        );
+                    // Prefer backend-provided canonical pointer for the current document.
+                    // Fallback: best-effort based on known doc types (for older sessions).
+                    const knownDocTypes = [
+                      "prd",
+                      "prd-review",
+                      "epics-and-stories",
+                      "implementation-readiness",
+                      "market-research",
+                      "domain-research",
+                      "technical-research"
+                    ];
+
+                    const doc = bmadSession.primaryArtifactId
+                      ? bmadSession.artifacts.find((a) => a.id === bmadSession.primaryArtifactId)
+                      : bmadSession.artifacts.find((a) => knownDocTypes.includes(a.type));
                     if (!doc) return null;
 
                     const filename = `${doc.type}.md`;

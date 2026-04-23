@@ -193,7 +193,15 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
   const menu = loadAgentMenu(agentSkillId);
 
   BmadSessionStore.save(session);
-  res.json({ ok: true, greeting, menu, session });
+  res.json({
+    ok: true,
+    greeting,
+    menu,
+    session,
+    // Canonical "current document" pointer for the UI (single source of truth).
+    // Frontend should prefer this over any skillId→type mapping.
+    primaryArtifactId: session.stepContext?.docArtifactId ?? null
+  });
 });
 
 const SelectSkillSchema = z.object({
@@ -212,7 +220,11 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
   // Reset step state for the selected skill; step runner will take over if skill has steps/.
   session.step = { kind: "chat", index: 0 };
   BmadSessionStore.save(session);
-  res.json({ ok: true, session });
+  res.json({
+    ok: true,
+    session,
+    primaryArtifactId: session.stepContext?.docArtifactId ?? null
+  });
 });
 
 const MessageSchema = z.object({
@@ -257,5 +269,11 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   }
 
   BmadSessionStore.save(session);
-  res.json({ ok: true, text, artifact: null, session });
+  res.json({
+    ok: true,
+    text,
+    artifact: null,
+    session,
+    primaryArtifactId: session.stepContext?.docArtifactId ?? null
+  });
 });
