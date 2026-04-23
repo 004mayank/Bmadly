@@ -347,8 +347,8 @@ export default function HomePage() {
   }, [elapsedSec]);
 
   return (
-    <main>
-      <header>
+    <main className="container">
+      <header style={{ marginBottom: 16 }}>
         <h1>Bmadly</h1>
         <p className="sub">browser-based BMAD execution</p>
       </header>
@@ -558,19 +558,20 @@ export default function HomePage() {
         <section className="panel">
           <div style={{ display: "grid", gap: 12 }}>
             <div>
-                <div className="sectionTitle">
-                  <div className="sectionTitleText">BMAD Chat (WIP)</div>
-                  <div className="muted" style={{ fontSize: 12 }}>
+              <div className="sectionTitle">
+                <div className="sectionTitleText">BMAD Chat</div>
+                <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
                   {bmadSession?.step?.kind === "bmad_steps" ? (
                     <>
                       {(bmadSession.activeSkillId || "") + " "}
-                      step {bmadSession.step.index}/{bmadSession.step.total ?? "?"} • {bmadStatus || ""}
+                      step {bmadSession.step.index}/{bmadSession.step.total ?? "?"}
+                      {bmadStatus ? ` • ${bmadStatus}` : ""}
                     </>
                   ) : (
                     bmadStatus || ""
                   )}
-                  </div>
                 </div>
+              </div>
 
               <div className="output" style={{ display: "grid", gap: 10 }}>
                 <div className="row" style={{ flexWrap: "wrap" }}>
