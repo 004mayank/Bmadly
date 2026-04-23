@@ -4,6 +4,9 @@ import { nanoid } from "nanoid";
 import { RunsStore } from "../store/runsStore.js";
 import { dockerRunBmad } from "../services/dockerRunner.js";
 import { maskKey } from "../utils/maskKey.js";
+import path from "node:path";
+import fs from "node:fs";
+import { startRunContainer } from "../execution/runContainerManager.js";
 
 export const runsRouter = Router();
 
@@ -48,6 +51,25 @@ runsRouter.post("/run", async (req, res) => {
 
   const runId = nanoid();
   RunsStore.create(runId, { provider, model, useOwnKey, createdAt: Date.now() });
+
+  // NEW MVP behavior: start a long-lived per-run container runtime.
+  // We'll still run the legacy one-shot runner in parallel for now.
+  try {
+    const repoRoot = process.cwd();
+    const workDirHost = path.join(repoRoot, ".bmadly", "runs", runId);
+    fs.mkdirSync(workDirHost, { recursive: true });
+    const hostPort = 18080 + Math.floor(Math.random() * 1000);
+    await startRunContainer({
+      runId,
+      image: "bmadly-runner:local",
+      hostPort,
+      runtimePort: 8080,
+      workDirHost
+    });
+    RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort}`);
+  } catch (e: any) {
+    RunsStore.appendLog(runId, `[runner] runtime container failed to start: ${String(e?.message || e)}`);
+  }
 
   // Fire-and-forget execution. Streaming happens via SSE endpoint.
   dockerRunBmad({

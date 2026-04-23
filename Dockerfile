@@ -33,4 +33,8 @@ RUN chmod +x /app/runner/*.sh || true
 
 ENV BMAD_COMMAND="node /app/runner/real-bmad-quick-dev.js"
 
-CMD ["bash", "-lc", "$BMAD_COMMAND"]
+# Default: run long-lived runtime server for per-run containers.
+# The host backend can override BMAD_COMMAND to run one-shot jobs.
+ENV BMADLY_RUNTIME_PORT=8080
+
+CMD ["bash", "-lc", "node /app/runner/bmadly-runtime-server.js"]
