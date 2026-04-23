@@ -148,7 +148,7 @@ runsRouter.get("/run/:runId/result", (req, res) => {
   const run = RunsStore.get(runId);
   if (!run) return res.status(404).json({ error: "Not found" });
   if (run.status === "running" || run.status === "queued") {
-    return res.json({ runId, status: run.status });
+    return res.json({ runId, status: run.status, runtime: run.runtime ?? null });
   }
-  return res.json({ runId, status: run.status, output: run.output ?? null });
+  return res.json({ runId, status: run.status, runtime: run.runtime ?? null, output: run.output ?? null });
 });
