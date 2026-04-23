@@ -369,18 +369,37 @@ export default function HomePage() {
         <p className="sub">browser-based BMAD execution</p>
       </header>
 
-      <div className="grid">
-        <section className="panel">
-          <div className="titleRow">
-            <div className="badge">
-              <span className={isRunning ? "ok" : "muted"}>●</span>
-              <span style={{ fontWeight: 600 }}>{isRunning ? "Running" : "Ready"}</span>
+      <div className="appShell">
+        <aside className="sidebar">
+          <div className="sidebarTitle">BMADly</div>
+          <button className={`navItem navItemActive`} type="button">
+            <span>Environment</span>
+            <span className="muted" style={{ fontSize: 12 }}>{isRunning ? "running" : "setup"}</span>
+          </button>
+          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
+            <span>Agent Chat</span>
+            <span className="muted" style={{ fontSize: 12 }}>{currentRunId ? "ready" : "locked"}</span>
+          </button>
+          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
+            <span>Artifacts</span>
+          </button>
+          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
+            <span>Logs</span>
+          </button>
+        </aside>
+
+        <div>
+          <div className="topTabs">
+            <div className="tabsRow">
+              <div className="tab tabActive">Execution</div>
+              <div className="tab">Analytics</div>
+              <div className="tab">Models</div>
             </div>
             <div className="row" style={{ justifyContent: "flex-end" }}>
               {currentRunId && (
                 <div className="badge" title={currentRunId}>
                   <span className="muted">runId</span>
-                  <span style={{ fontSize: 12, maxWidth: 140, overflow: "hidden", textOverflow: "ellipsis" }}>
+                  <span style={{ fontSize: 12, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis" }}>
                     {currentRunId}
                   </span>
                 </div>
@@ -396,6 +415,16 @@ export default function HomePage() {
               </button>
             </div>
           </div>
+
+          <div className="cards2">
+            <section className="card">
+              <div className="cardTitle">
+                <div className="cardTitleText">Environment Setup</div>
+                <div className="pill">
+                  <span className={isRunning ? "ok" : "muted"}>●</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{isRunning ? "Running" : "Ready"}</span>
+                </div>
+              </div>
 
           <div className="split2">
             <div>
@@ -571,10 +600,21 @@ export default function HomePage() {
               </div>
             </div>
           )}
-        </section>
+            </section>
 
-        <section className="panel">
-          <div style={{ display: "grid", gap: 12 }}>
+            <section className="card">
+              <div className="cardTitle">
+                <div className="cardTitleText">Stdout Monitor</div>
+                <div className="muted" style={{ fontSize: 12 }}>runtime + execution logs</div>
+              </div>
+              <div className="monoBox" style={{ maxHeight: 380, overflow: "auto" }}>
+                {logs.length ? logs.join("\n") : "(logs will appear here)"}
+              </div>
+            </section>
+          </div>
+
+          <section className="panel" style={{ marginTop: 16 }}>
+            <div style={{ display: "grid", gap: 12 }}>
             <div>
               <div className="sectionTitle">
                 <div className="sectionTitleText">BMAD Chat</div>
@@ -972,7 +1012,8 @@ export default function HomePage() {
               </div>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       </div>
     </main>
   );
