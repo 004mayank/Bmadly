@@ -504,8 +504,10 @@ export default function HomePage() {
                         intent: "improve_ui",
                         provider,
                         model,
+                        // Runtime backend uses one-time /api/runtime/auth.
+                        // Keep these fields for backward compatibility but do not resend apiKey.
                         useOwnKey,
-                        apiKey: useOwnKey ? apiKey : undefined
+                        apiKey: undefined
                       })
                     });
                     streamLogs(currentRunId);
@@ -530,7 +532,7 @@ export default function HomePage() {
                         provider,
                         model,
                         useOwnKey,
-                        apiKey: useOwnKey ? apiKey : undefined
+                        apiKey: undefined
                       })
                     });
                     streamLogs(currentRunId);
@@ -558,7 +560,7 @@ export default function HomePage() {
                         provider,
                         model,
                         useOwnKey,
-                        apiKey: useOwnKey ? apiKey : undefined
+                        apiKey: undefined
                       })
                     });
                     streamLogs(currentRunId);

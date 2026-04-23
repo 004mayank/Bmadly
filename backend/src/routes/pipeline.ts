@@ -8,6 +8,7 @@ import type { Provider } from "../pipeline/types.js";
 import { maskKey } from "../utils/maskKey.js";
 import { RunsStore } from "../store/runsStore.js";
 import { runtimeFetch } from "../execution/runtimeProxy.js";
+import { RuntimeAuthStore } from "../runtime/runtimeAuth.js";
 
 export const pipelineRouter = Router();
 
@@ -130,29 +131,43 @@ pipelineRouter.post("/pipeline/iterate", async (req, res) => {
   if (proxied) return res.json(proxied);
 
   let normalizedKey: string | undefined;
-  if (useOwnKey) {
-    if (!apiKey) return res.status(400).json({ error: "BYOK enabled but apiKey is missing" });
-    normalizedKey = normalizeKey(apiKey);
-    const bad = validateKey(normalizedKey);
-    if (bad) return res.status(400).json({ error: `Invalid apiKey (${bad})` });
-  }
 
-  if (!useOwnKey) {
-    const managed = envKeyFor(provider);
-    if (!managed || managed.trim().length < 8) {
-      return res.status(400).json({ error: `Managed key missing for provider=${provider}. Set env var or enable BYOK.` });
+  // In-container runtime mode: prefer the one-time /runtime/auth handshake.
+  if (isRuntimeContainerBackend()) {
+    const a = RuntimeAuthStore.get();
+    if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
+    normalizedKey = a.apiKey;
+  } else {
+    // Host-only (no runtime) behavior: require key as before.
+    if (useOwnKey) {
+      if (!apiKey) return res.status(400).json({ error: "BYOK enabled but apiKey is missing" });
+      normalizedKey = normalizeKey(apiKey);
+      const bad = validateKey(normalizedKey);
+      if (bad) return res.status(400).json({ error: `Invalid apiKey (${bad})` });
     }
-    normalizedKey = managed.trim();
+
+    if (!useOwnKey) {
+      const managed = envKeyFor(provider);
+      if (!managed || managed.trim().length < 8) {
+        return res.status(400).json({ error: `Managed key missing for provider=${provider}. Set env var or enable BYOK.` });
+      }
+      normalizedKey = managed.trim();
+    }
   }
 
   const rec = PipelineStore.get(runId);
   if (!rec) return res.status(404).json({ error: "Run not found" });
 
+  // In runtime-container mode, use the authed provider/model to prevent drift.
+  const a = isRuntimeContainerBackend() ? RuntimeAuthStore.get() : null;
+  const effectiveProvider = (a?.provider ?? provider) as Provider;
+  const effectiveModel = a?.model ?? model;
+
   runIteration({
     runId,
     intent,
     note,
-    config: { provider: provider as Provider, model, useOwnKey, apiKey: normalizedKey },
+    config: { provider: effectiveProvider, model: effectiveModel, useOwnKey: true, apiKey: normalizedKey },
     onLog: (line) => PipelineStore.appendLog(runId, line)
   }).catch((err) => {
     PipelineStore.appendLog(runId, `[iter] fatal: ${String(err?.message || err)}`);
