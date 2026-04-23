@@ -85,6 +85,12 @@ The right-hand panel includes a **BMAD Chat (WIP)** mode that uses the vendored 
   - Continue is gated on `C` (UI has a Continue button)
   - Step progress is shown (step X/Y)
   - A persistent document artifact is maintained with YAML frontmatter (`stepsCompleted`, `updatedAt`)
+ - The UI shows a **Current Document** panel backed by a canonical server-side pointer:
+   - `primaryArtifactId` (derived from `session.stepContext.docArtifactId`)
+   - returned on chat endpoints and on session list/resume
+ - Prompt-tool menu items (used by Tech Writer) that reference `{skill-root}/<file>.md` are supported:
+   - if the chat input matches `Read and follow the instructions in {skill-root}/...`,
+     the backend safely inlines that file as authoritative instructions
 
 ### Persistence
 - BMAD sessions are stored under:
@@ -116,6 +122,9 @@ BMAD Chat can create a run id on-demand:
 - `POST /api/bmad/sessions/select-skill`
 - `POST /api/bmad/sessions/message`
 - `GET /api/bmad/sessions/:sessionId/debug`
+
+BMAD chat responses also include:
+- `primaryArtifactId` (string | null) — the session's canonical "current document" artifact id
 
 ## Local setup
 
