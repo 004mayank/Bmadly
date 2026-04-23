@@ -61,7 +61,7 @@ runsRouter.post("/run", async (req, res) => {
     const hostPort = await pickFreePortInRange({ start: 18080, end: 18999 });
     await startRunContainer({
       runId,
-      image: "bmadly-runner:local",
+      image: "bmadly-runtime:local",
       hostPort,
       runtimePort: 8080,
       workDirHost

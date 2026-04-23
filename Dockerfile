@@ -1,9 +1,38 @@
-# Bmadly runner image
-# This image is responsible for executing BMAD inside an isolated container.
-# It includes (a) mock runners for development and (b) a real BMAD installer + a
-# minimal workflow driver (starting with quick-dev).
+# Bmadly multi-target image
+#
+# Targets:
+# - runtime: runs the BMADly backend (Express) inside the container on :8080
+# - runner: one-shot runner image (kept for now)
 
-FROM node:20-slim
+############################
+# runtime: backend-in-container
+############################
+FROM node:20-slim AS runtime
+
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+  && rm -rf /var/lib/apt/lists/*
+
+# Copy only backend + root package manifests needed for build.
+COPY backend /app/backend
+
+WORKDIR /app/backend
+RUN npm install
+RUN npm run build
+
+ENV PORT=8080
+EXPOSE 8080
+
+CMD ["node", "dist/index.js"]
+
+############################
+# runner: one-shot runner (legacy)
+############################
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
@@ -28,13 +57,9 @@ RUN npm install -g bmad-method@6.3.0
 
 COPY docker/runner /app/runner
 
-# For live preview mode we run a Next.js dev server. Cache npm where possible.
 RUN chmod +x /app/runner/*.sh || true
 
 ENV BMAD_COMMAND="node /app/runner/real-bmad-quick-dev.js"
 
-# Default: run long-lived runtime server for per-run containers.
-# The host backend can override BMAD_COMMAND to run one-shot jobs.
-ENV BMADLY_RUNTIME_PORT=8080
+CMD ["bash", "-lc", "$BMAD_COMMAND"]
 
-CMD ["bash", "-lc", "node /app/runner/bmadly-runtime-server.js"]
