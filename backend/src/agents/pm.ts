@@ -25,8 +25,8 @@ export async function productManagerAgent(params: { analysisMd: string; llm: Llm
           ? JSON.stringify({
               model: llm.model,
               input: [
-                { role: "system", content: [{ type: "text", text: system }] },
-                { role: "user", content: [{ type: "text", text: user }] }
+                { role: "system", content: [{ type: "input_text", text: system }] },
+                { role: "user", content: [{ type: "input_text", text: user }] }
               ]
             })
           : JSON.stringify({

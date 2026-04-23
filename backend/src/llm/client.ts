@@ -90,10 +90,10 @@ async function openaiJson<T>(params: {
     model,
     // Use responses API for modern OpenAI; request strict JSON output.
     input: [
-      { role: "system", content: [{ type: "text", text: system }] },
+      { role: "system", content: [{ type: "input_text", text: system }] },
       {
         role: "user",
-        content: [{ type: "text", text: schemaHint ? `${user}\n\nJSON schema hint:\n${schemaHint}` : user }]
+        content: [{ type: "input_text", text: schemaHint ? `${user}\n\nJSON schema hint:\n${schemaHint}` : user }]
       }
     ],
     text: { format: { type: "json_object" } }

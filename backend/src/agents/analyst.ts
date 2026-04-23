@@ -24,7 +24,7 @@ export async function analystAgent(params: { idea: string; llm: LlmConfig }) {
                   role: "system",
                   content: [
                     {
-                      type: "text",
+                      type: "input_text",
                       text:
                         "You are an expert analyst. Produce a concise analysis document in Markdown. No code fences. Include: Problem, Target users, Key constraints, Risks, Success metrics, Open questions."
                     }
@@ -32,7 +32,7 @@ export async function analystAgent(params: { idea: string; llm: LlmConfig }) {
                 },
                 {
                   role: "user",
-                  content: [{ type: "text", text: `Product idea:\n${idea}` }]
+                  content: [{ type: "input_text", text: `Product idea:\n${idea}` }]
                 }
               ]
             })
