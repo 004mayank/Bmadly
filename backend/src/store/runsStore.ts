@@ -12,6 +12,11 @@ export type RunRecord = {
   status: RunStatus;
   meta: RunMeta;
   logs: string[];
+  runtime?: {
+    // Host port mapped to the per-run container runtime server.
+    hostPort: number;
+    containerPort: number;
+  };
   output?: unknown;
   finishedAt?: number;
 };
@@ -65,5 +70,12 @@ export const RunsStore = {
     r.output = params.output;
     r.finishedAt = Date.now();
     gc();
+  }
+  ,
+
+  setRuntime(runId: string, runtime: { hostPort: number; containerPort: number }) {
+    const r = runs.get(runId);
+    if (!r) return;
+    r.runtime = runtime;
   }
 };

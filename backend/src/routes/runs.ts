@@ -6,7 +6,7 @@ import { dockerRunBmad } from "../services/dockerRunner.js";
 import { maskKey } from "../utils/maskKey.js";
 import path from "node:path";
 import fs from "node:fs";
-import { startRunContainer } from "../execution/runContainerManager.js";
+import { pickFreePortInRange, startRunContainer } from "../execution/runContainerManager.js";
 
 export const runsRouter = Router();
 
@@ -58,7 +58,7 @@ runsRouter.post("/run", async (req, res) => {
     const repoRoot = process.cwd();
     const workDirHost = path.join(repoRoot, ".bmadly", "runs", runId);
     fs.mkdirSync(workDirHost, { recursive: true });
-    const hostPort = 18080 + Math.floor(Math.random() * 1000);
+    const hostPort = await pickFreePortInRange({ start: 18080, end: 18999 });
     await startRunContainer({
       runId,
       image: "bmadly-runner:local",
@@ -66,6 +66,7 @@ runsRouter.post("/run", async (req, res) => {
       runtimePort: 8080,
       workDirHost
     });
+    RunsStore.setRuntime(runId, { hostPort, containerPort: 8080 });
     RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort}`);
   } catch (e: any) {
     RunsStore.appendLog(runId, `[runner] runtime container failed to start: ${String(e?.message || e)}`);

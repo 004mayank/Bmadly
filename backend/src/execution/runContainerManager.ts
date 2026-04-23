@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import net from "node:net";
 
 export type RunContainerConfig = {
   runId: string;
@@ -42,6 +43,22 @@ export async function startRunContainer(cfg: RunContainerConfig): Promise<void> 
   });
 }
 
+export async function pickFreePortInRange(params: { start: number; end: number }): Promise<number> {
+  const { start, end } = params;
+  for (let port = start; port <= end; port++) {
+    const ok = await new Promise<boolean>((resolve) => {
+      const srv = net.createServer();
+      srv.unref();
+      srv.on("error", () => resolve(false));
+      srv.listen(port, "127.0.0.1", () => {
+        srv.close(() => resolve(true));
+      });
+    });
+    if (ok) return port;
+  }
+  throw new Error(`No free ports in range ${start}-${end}`);
+}
+
 export async function stopRunContainer(runId: string): Promise<void> {
   const name = containerNameForRun(runId);
   await new Promise<void>((resolve) => {
@@ -50,4 +67,3 @@ export async function stopRunContainer(runId: string): Promise<void> {
     child.on("error", () => resolve());
   });
 }
-
