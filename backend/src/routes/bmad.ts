@@ -165,7 +165,13 @@ bmadRouter.get("/bmad/sessions", (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Invalid query", details: parsed.error.flatten() });
   const { runId } = parsed.data;
   const sessions = BmadSessionStore.listByRun(runId);
-  res.json({ ok: true, runId, sessions });
+  // Include canonical current-document pointers per session so the frontend can
+  // immediately render the right "Current Document" on resume.
+  const sessionsWithPrimary = sessions.map((s) => ({
+    ...s,
+    primaryArtifactId: s.stepContext?.docArtifactId ?? null
+  }));
+  res.json({ ok: true, runId, sessions: sessionsWithPrimary });
 });
 
 const StartSchema = z.object({
