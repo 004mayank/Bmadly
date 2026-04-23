@@ -263,6 +263,23 @@ export async function advanceSession(params: {
   const guidedPath = active ? path.join(active.absDir, "prompts", "guided-elicitation.md") : null;
   const guided = guidedPath && fs.existsSync(guidedPath) ? fs.readFileSync(guidedPath, "utf8") : null;
 
+  // If the selected menu entry is a prompt-based tool (common for Tech Writer),
+  // we support a simple convention:
+  //   "Read and follow the instructions in {skill-root}/file.md"
+  // We inline that file contents into the system prompt so the model actually sees it.
+  //
+  // NOTE: This is intentionally narrow to avoid arbitrary file reads.
+  let promptToolMd: string | null = null;
+  const promptMatch = userMessage.match(/Read and follow the instructions in\s+\{skill-root\}\/([^\s]+\.md)\s*$/i);
+  if (promptMatch && active) {
+    const rel = promptMatch[1];
+    const safeRel = rel.replace(/^\/+/, "");
+    const candidate = path.join(active.absDir, safeRel);
+    if (candidate.startsWith(active.absDir) && fs.existsSync(candidate)) {
+      promptToolMd = fs.readFileSync(candidate, "utf8");
+    }
+  }
+
   const history = session.messages
     .slice(-16)
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
@@ -274,6 +291,9 @@ export async function advanceSession(params: {
     `You are operating inside a chat UI. Ask one question at a time. If you need more info, ask a focused question. ` +
     (guided
       ? `You MUST follow this BMAD guided elicitation prompt as closely as possible (treat it as authoritative instructions):\n\n${guided}\n\n`
+      : "") +
+    (promptToolMd
+      ? `\n\nPROMPT TOOL INSTRUCTIONS (authoritative):\n\n${promptToolMd}\n\n`
       : "");
 
   const user = `Conversation so far:\n${history}\n\nLatest user message:\n${userMessage}`;
@@ -288,5 +308,12 @@ export async function advanceSession(params: {
     schemaHint:
       `{ "text": "string", "artifact": null | { "type": "string", "title": "string?", "content": "string" } }`
   });
-  return r;
+
+  // If agent menu entry uses a prompt like:
+  //   "Read and follow the instructions in {skill-root}/some-file.md"
+  // resolve it by inlining the referenced file content as additional system context.
+  // This keeps prompts declarative in customize.toml while ensuring the model
+  // actually sees the instructions.
+  const text = String((r as any)?.text ?? "").trim();
+  return { ...(r as any), text };
 }
