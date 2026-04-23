@@ -2,11 +2,11 @@ import { Router } from "express";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { RunsStore } from "../store/runsStore.js";
-import { dockerRunBmad } from "../services/dockerRunner.js";
 import { maskKey } from "../utils/maskKey.js";
 import path from "node:path";
 import fs from "node:fs";
 import { pickFreePortInRange, startRunContainer } from "../execution/runContainerManager.js";
+import { tailContainerLogs } from "../execution/dockerLogsTail.js";
 
 export const runsRouter = Router();
 
@@ -68,6 +68,9 @@ runsRouter.post("/run", async (req, res) => {
     });
     RunsStore.setRuntime(runId, { hostPort, containerPort: 8080 });
     RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort}`);
+
+    // Start streaming container logs into RunsStore so SSE can show progress.
+    tailContainerLogs({ runId, containerName: `bmadly-run-${runId}` });
   } catch (e: any) {
     RunsStore.appendLog(runId, `[runner] runtime container failed to start: ${String(e?.message || e)}`);
   }
