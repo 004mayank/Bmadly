@@ -72,18 +72,8 @@ runsRouter.post("/run", async (req, res) => {
     RunsStore.appendLog(runId, `[runner] runtime container failed to start: ${String(e?.message || e)}`);
   }
 
-  // Fire-and-forget execution. Streaming happens via SSE endpoint.
-  dockerRunBmad({
-    runId,
-    provider,
-    model,
-    useOwnKey,
-    apiKey: useOwnKey ? normalizedKey : undefined,
-    input
-  }).catch((err) => {
-    RunsStore.appendLog(runId, `[runner] fatal: ${String(err?.message || err)}`);
-    RunsStore.finish(runId, { status: "failed", output: { error: "Runner failed" } });
-  });
+  // Legacy one-shot runner disabled now that we have a runtime container.
+  RunsStore.setStatus(runId, "running");
 
   // eslint-disable-next-line no-console
   console.log(

@@ -3,6 +3,7 @@ import { runsRouter } from "./routes/runs.js";
 import { pipelineRouter } from "./routes/pipeline.js";
 import { bmadRouter } from "./routes/bmad.js";
 import { runtimeRouter } from "./routes/runtime.js";
+import { runtimeHostRouter } from "./routes/runtimeHost.js";
 import express from "express";
 
 const PORT = Number(process.env.PORT || 4000);
@@ -28,6 +29,7 @@ app.use("/api", runsRouter);
 app.use("/api", pipelineRouter);
 app.use("/api", bmadRouter);
 app.use("/api", runtimeRouter);
+app.use("/api", runtimeHostRouter);
 
 // Serve static previews (local-only MVP)
 app.use("/preview", express.static(".bmadly-previews"));

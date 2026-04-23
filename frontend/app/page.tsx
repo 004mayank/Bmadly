@@ -267,16 +267,15 @@ export default function HomePage() {
     }
 
     try {
-      const resp = await fetch(`${API_BASE_URL}/api/pipeline/run`, {
+      const resp = await fetch(`${API_BASE_URL}/api/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          idea,
           provider,
           model,
           useOwnKey,
           apiKey: useOwnKey ? apiKey : undefined,
-          input: {}
+          input: { idea }
         })
       });
 
@@ -287,6 +286,23 @@ export default function HomePage() {
 
       const data = (await resp.json()) as RunResponse;
       setRunState({ status: "running", runId: data.runId });
+
+      // One-time runtime auth handshake (stores BYOK in the per-run container memory).
+      if (useOwnKey) {
+        setLogs((l) => [...l, "[ui] authenticating runtime…"]);
+        const ar = await fetch(`${API_BASE_URL}/api/runtime/auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runId: data.runId, provider, model, apiKey })
+        });
+        const aj = await ar.json().catch(() => ({}));
+        if (!ar.ok) {
+          setLogs((l) => [...l, `[ui] runtime auth failed: ${aj?.error || ar.status}`]);
+        } else {
+          setLogs((l) => [...l, "[ui] runtime authenticated"]);
+        }
+      }
+
       streamLogs(data.runId);
     } catch (e: any) {
       setStartedAt(null);
@@ -295,7 +311,7 @@ export default function HomePage() {
   }
 
   async function streamLogs(runId: string) {
-    const es = new EventSource(`${API_BASE_URL}/api/pipeline/run/${runId}/stream`);
+    const es = new EventSource(`${API_BASE_URL}/api/run/${runId}/stream`);
 
     es.addEventListener("log", (ev) => {
       const msg = JSON.parse((ev as MessageEvent).data);
@@ -311,9 +327,9 @@ export default function HomePage() {
       setStartedAt(null);
 
       // fetch result
-      const r = await fetch(`${API_BASE_URL}/api/pipeline/run/${runId}/result`);
+      const r = await fetch(`${API_BASE_URL}/api/run/${runId}/result`);
       const j = await r.json().catch(() => null);
-      const result = j?.result;
+      const result = j?.output;
       if (result?.artifacts?.analysis?.content) setAnalysisMd(String(result.artifacts.analysis.content));
       if (result?.artifacts?.prd?.content) setPrdMd(String(result.artifacts.prd.content));
       if (Array.isArray(result?.artifacts?.bmad)) setBmadArtifactsFromRun(result.artifacts.bmad);
