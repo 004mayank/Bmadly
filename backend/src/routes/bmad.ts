@@ -10,6 +10,7 @@ import type { Provider } from "../pipeline/types.js";
 import { PipelineStore } from "../pipeline/store.js";
 import { RunsStore } from "../store/runsStore.js";
 import { runtimeFetch } from "../execution/runtimeProxy.js";
+import { RuntimeAuthStore } from "../runtime/runtimeAuth.js";
 
 export const bmadRouter = Router();
 
@@ -192,6 +193,13 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
+  // In-container runtime mode: if this backend is running inside the per-run container,
+  // we expect a runtime auth handshake and do not require apiKey per request.
+  if (process.env.PORT === "8080") {
+    const a = RuntimeAuthStore.get();
+    if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
+  }
+
   // If a per-run runtime container exists, proxy chat to it.
   const run = RunsStore.get(session.runId);
   if (run?.runtime?.hostPort) {
@@ -274,6 +282,11 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   const { sessionId, message, provider, model, apiKey } = parsed.data;
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
+
+  if (process.env.PORT === "8080") {
+    const a = RuntimeAuthStore.get();
+    if (!a) return res.status(401).json({ error: "Runtime not authenticated. Call POST /api/runtime/auth first." });
+  }
 
   const run = RunsStore.get(session.runId);
   if (run?.runtime?.hostPort) {

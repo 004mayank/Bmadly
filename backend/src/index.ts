@@ -2,6 +2,7 @@ import cors from "cors";
 import { runsRouter } from "./routes/runs.js";
 import { pipelineRouter } from "./routes/pipeline.js";
 import { bmadRouter } from "./routes/bmad.js";
+import { runtimeRouter } from "./routes/runtime.js";
 import express from "express";
 
 const PORT = Number(process.env.PORT || 4000);
@@ -26,6 +27,7 @@ app.get("/health", (_req, res) => {
 app.use("/api", runsRouter);
 app.use("/api", pipelineRouter);
 app.use("/api", bmadRouter);
+app.use("/api", runtimeRouter);
 
 // Serve static previews (local-only MVP)
 app.use("/preview", express.static(".bmadly-previews"));

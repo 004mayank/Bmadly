@@ -18,6 +18,20 @@ export async function llmJson<T>(params: {
   schemaHint?: string;
 }): Promise<T> {
   const { config, system, user, schemaHint } = params;
+
+  // In-container runtime: if config.apiKey is empty, fall back to runtime auth store.
+  // This enables a one-time /runtime/auth handshake.
+  if ((!config.apiKey || config.apiKey.trim().length < 8) && process.env.PORT === "8080") {
+    try {
+      const mod = await import("../runtime/runtimeAuth.js");
+      const a = mod.RuntimeAuthStore.get();
+      if (a && a.apiKey) {
+        (config as any).apiKey = a.apiKey;
+      }
+    } catch {
+      // ignore
+    }
+  }
   if (config.provider === "openai") {
     return openaiJson<T>({ apiKey: config.apiKey, model: config.model, system, user, schemaHint });
   }
