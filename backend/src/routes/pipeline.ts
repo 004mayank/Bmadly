@@ -6,8 +6,22 @@ import { sseInit, sseEvent } from "../pipeline/sse.js";
 import { runFullPipeline, runIteration } from "../pipeline/orchestrator.js";
 import type { Provider } from "../pipeline/types.js";
 import { maskKey } from "../utils/maskKey.js";
+import { RunsStore } from "../store/runsStore.js";
+import { runtimeFetch } from "../execution/runtimeProxy.js";
 
 export const pipelineRouter = Router();
+
+function isRuntimeContainerBackend() {
+  return String(process.env.PORT || "") === "8080";
+}
+
+async function proxyIfRuntime(params: { runId: string; path: string; method: string; body?: any }) {
+  if (isRuntimeContainerBackend()) return null;
+  const run = RunsStore.get(params.runId);
+  const hostPort = run?.runtime?.hostPort;
+  if (!hostPort) return null;
+  return runtimeFetch({ hostPort, path: `/api${params.path}`, method: params.method as any, body: params.body });
+}
 
 const ProviderEnum = z.enum(["openai", "anthropic", "gemini"]);
 
@@ -110,6 +124,10 @@ pipelineRouter.post("/pipeline/iterate", async (req, res) => {
   if (!parsed.success) return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
 
   const { runId, intent, note, provider, model, useOwnKey, apiKey } = parsed.data;
+
+  // Host mode: proxy iteration into the runtime container backend for this runId.
+  const proxied = await proxyIfRuntime({ runId, path: "/pipeline/iterate", method: "POST", body: req.body });
+  if (proxied) return res.json(proxied);
 
   let normalizedKey: string | undefined;
   if (useOwnKey) {
