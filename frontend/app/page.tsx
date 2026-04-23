@@ -71,6 +71,8 @@ export default function HomePage() {
   const [bmadDebugOpen, setBmadDebugOpen] = useState(false);
   const [bmadDebugJson, setBmadDebugJson] = useState<string>("");
 
+  const [activeView, setActiveView] = useState<"environment" | "agents" | "export">("environment");
+
   const terminalRef = useRef<HTMLDivElement | null>(null);
   const bmadChatRef = useRef<HTMLDivElement | null>(null);
 
@@ -383,19 +385,30 @@ export default function HomePage() {
       <div className="appShell">
         <aside className="sidebar">
           <div className="sidebarTitle">BMADly</div>
-          <button className={`navItem navItemActive`} type="button">
+          <button
+            className={`navItem ${activeView === "environment" ? "navItemActive" : ""}`}
+            type="button"
+            onClick={() => setActiveView("environment")}
+          >
             <span>Environment</span>
             <span className="muted" style={{ fontSize: 12 }}>{isRunning ? "running" : "setup"}</span>
           </button>
-          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
+          <button
+            className={`navItem ${activeView === "agents" ? "navItemActive" : ""} ${!currentRunId ? "navItemDisabled" : ""}`}
+            type="button"
+            disabled={!currentRunId}
+            onClick={() => currentRunId && setActiveView("agents")}
+          >
             <span>Agent Chat</span>
             <span className="muted" style={{ fontSize: 12 }}>{currentRunId ? "ready" : "locked"}</span>
           </button>
-          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
-            <span>Artifacts</span>
-          </button>
-          <button className={`navItem ${!currentRunId ? "navItemDisabled" : ""}`} type="button" disabled={!currentRunId}>
-            <span>Logs</span>
+          <button
+            className={`navItem ${activeView === "export" ? "navItemActive" : ""} ${!currentRunId ? "navItemDisabled" : ""}`}
+            type="button"
+            disabled={!currentRunId}
+            onClick={() => currentRunId && setActiveView("export")}
+          >
+            <span>Export</span>
           </button>
         </aside>
 
@@ -427,7 +440,8 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="cards2">
+          {activeView === "environment" ? (
+            <div className="cards2">
             <section className="card">
               <div className="cardTitle">
                 <div className="cardTitleText">Environment Setup</div>
@@ -624,405 +638,105 @@ export default function HomePage() {
             </section>
           </div>
 
-          <section className="panel" style={{ marginTop: 16 }}>
-            <div style={{ display: "grid", gap: 12 }}>
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">BMAD Chat</div>
-                <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-                  {bmadSession?.step?.kind === "bmad_steps" ? (
-                    <>
-                      {(bmadSession.activeSkillId || "") + " "}
-                      step {bmadSession.step.index}/{bmadSession.step.total ?? "?"}
-                      {bmadStatus ? ` • ${bmadStatus}` : ""}
-                    </>
-                  ) : (
-                    bmadStatus || ""
-                  )}
-                </div>
-              </div>
-
-              <div className="output" style={{ display: "grid", gap: 10 }}>
-                <div className="row" style={{ flexWrap: "wrap" }}>
-                  <select
-                    className="select"
-                    value={bmadAgentSkillId}
-                    onChange={(e) => setBmadAgentSkillId(e.target.value)}
-                    disabled={!currentRunId}
-                    title="BMAD agent skill id"
-                  >
-                    {BMAD_METHOD_AGENTS.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.label}{a.title ? ` (${a.title})` : ""}
-                      </option>
-                    ))}
-                  </select>
-
-                  <button className="btnSecondary" type="button" onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))}>
-                    Start agent
-                  </button>
-
-                  <button
-                    className="btnSecondary"
-                    type="button"
-                    disabled={!bmadSession}
-                    onClick={() => {
-                      const next = !bmadDebugOpen;
-                      setBmadDebugOpen(next);
-                      if (next && bmadSession) {
-                        fetchBmadDebug(bmadSession.id).catch((e) => setBmadStatus(e?.message || "Debug failed"));
-                      }
-                    }}
-                  >
-                    {bmadDebugOpen ? "Hide debug" : "Debug"}
-                  </button>
-
-                  <button
-                    className="btnSecondary"
-                    type="button"
-                    disabled={!currentRunId}
-                    onClick={() => {
-                      setBmadSession(null);
-                      setBmadMenu(null);
-                      setBmadStatus("Reset. Click Start agent to begin a new session.");
-                    }}
-                    title="Reset local BMAD chat state (new session will be created on next start)"
-                  >
-                    Reset
-                  </button>
+          ) : activeView === "export" ? (
+            <div className="cards2">
+              <section className="card">
+                <div className="cardTitle">
+                  <div className="cardTitleText">Export Documents</div>
+                  <div className="muted" style={{ fontSize: 12 }}>download markdown / pdf</div>
                 </div>
 
-                {bmadDebugOpen && bmadDebugJson ? (
-                  <div className="output" style={{ maxHeight: 200, overflow: "auto" }}>
-                    {bmadDebugJson}
-                  </div>
-                ) : null}
+                <div className="monoBox" style={{ minHeight: 260, maxHeight: 420, overflow: "auto" }}>
+                  {(prdMd || analysisMd || output || "(no document yet — run an agent to generate artifacts)")}
+                </div>
+              </section>
 
-                {bmadMenu && bmadMenu.length > 0 && (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      Menu
-                    </div>
-                    <div className="row" style={{ flexWrap: "wrap" }}>
-                      {bmadMenu.map((m) => (
-                        <button
-                          key={m.code}
-                          className="btnSecondary"
-                          type="button"
-                          onClick={() => {
-                            if (m.skill) selectBmadSkill(m.skill).catch((e) => setBmadStatus(e?.message || "Failed"));
-                          }}
-                          title={m.skill || m.prompt || ""}
-                        >
-                          {m.code}: {m.description}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div ref={bmadChatRef} style={{ maxHeight: 220, overflow: "auto", border: "1px solid #1f2937", borderRadius: 14, padding: 12, background: "#0b1020" }}>
-                  {!bmadSession || bmadSession.messages.length === 0 ? (
-                    <div className="terminalLineDim">(start an agent to begin chatting)</div>
-                  ) : (
-                    bmadSession.messages.map((m, idx) => (
-                      <div key={idx} className={m.role === "assistant" ? "terminalLine" : "terminalLineWarn"}>
-                        <span style={{ opacity: 0.7 }}>{m.role === "assistant" ? "assistant" : "you"}:</span> {m.text}
-                      </div>
-                    ))
-                  )}
+              <section className="card">
+                <div className="cardTitle">
+                  <div className="cardTitleText">Download</div>
                 </div>
 
-                <div className="row">
-                  <input
-                    className="input"
-                    value={bmadChatInput}
-                    onChange={(e) => setBmadChatInput(e.target.value)}
-                    placeholder="Type your reply…"
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        sendBmadChat().catch((err) => setBmadStatus(err?.message || "Failed"));
-                      }
-                    }}
-                  />
+                <div style={{ display: "grid", gap: 10 }}>
                   <button
-                    className="btnSecondary"
+                    className="btnPrimary"
                     type="button"
-                    disabled={bmadSession?.step?.kind !== "bmad_steps"}
+                    disabled={!prdMd && !analysisMd && !output}
                     onClick={() => {
-                      sendBmadChat("C").catch((e) => setBmadStatus(e?.message || "Failed"));
-                    }}
-                    title="BMAD continue"
-                  >
-                    Continue
-                  </button>
-                  <button
-                    className="btnSecondary"
-                    type="button"
-                    disabled={bmadSession?.step?.kind !== "bmad_steps"}
-                    onClick={() => {
-                      sendBmadChat("Modify").catch((e) => setBmadStatus(e?.message || "Failed"));
-                    }}
-                    title="BMAD modify scope"
-                  >
-                    Modify
-                  </button>
-                  <button className="btnPrimary" type="button" onClick={() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed"))}>
-                    Send
-                  </button>
-                </div>
-
-                {bmadSession?.artifacts?.length ? (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      Artifacts
-                    </div>
-                    {bmadSession.artifacts.map((a) => (
-                      <div key={a.id} style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                          <div style={{ fontSize: 12, opacity: 0.8 }}>{a.type}{a.title ? ` — ${a.title}` : ""}</div>
-                          <button
-                            className="btnSecondary"
-                            type="button"
-                            onClick={() => navigator.clipboard.writeText(a.content).catch(() => {})}
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="output" style={{ marginTop: 8 }}>{a.content}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                {bmadSession?.step?.kind === "bmad_steps" ? (
-                  (() => {
-                    // Prefer backend-provided canonical pointer for the current document.
-                    // Fallback: best-effort based on known doc types (for older sessions).
-                    const knownDocTypes = [
-                      "prd",
-                      "prd-review",
-                      "epics-and-stories",
-                      "implementation-readiness",
-                      "market-research",
-                      "domain-research",
-                      "technical-research"
-                    ];
-
-                    const doc = bmadSession.primaryArtifactId
-                      ? bmadSession.artifacts.find((a) => a.id === bmadSession.primaryArtifactId)
-                      : bmadSession.artifacts.find((a) => knownDocTypes.includes(a.type));
-                    if (!doc) return null;
-
-                    const filename = `${doc.type}.md`;
-                    const download = () => {
-                      const blob = new Blob([doc.content], { type: "text/markdown;charset=utf-8" });
+                      const content = prdMd || analysisMd || output || "";
+                      const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement("a");
                       a.href = url;
-                      a.download = filename;
+                      a.download = prdMd ? "prd.md" : analysisMd ? "analysis.md" : "bmadly-output.md";
                       document.body.appendChild(a);
                       a.click();
                       a.remove();
                       URL.revokeObjectURL(url);
-                    };
-
-                    return (
-                      <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                        <div className="muted" style={{ fontSize: 12 }}>
-                          Current Document ({doc.type})
-                        </div>
-                        <div style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                            <div style={{ fontSize: 12, opacity: 0.8 }}>{doc.title || "market-research"}</div>
-                            <div className="row" style={{ gap: 8 }}>
-                              <button
-                                className="btnSecondary"
-                                type="button"
-                                onClick={() => navigator.clipboard.writeText(doc.content).catch(() => {})}
-                              >
-                                Copy
-                              </button>
-                              <button className="btnSecondary" type="button" onClick={download}>
-                                Download
-                              </button>
-                            </div>
-                          </div>
-                          <div className="output" style={{ marginTop: 8, maxHeight: 260, overflow: "auto" }}>
-                            {doc.content}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()
-                ) : null}
-
-                {bmadArtifactsFromRun.length ? (
-                  <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
-                    <div className="muted" style={{ fontSize: 12 }}>
-                      BMAD Artifacts (attached to run)
-                    </div>
-                    {bmadArtifactsFromRun.map((a) => (
-                      <div key={a.id} style={{ border: "1px solid #1f2937", borderRadius: 12, padding: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                          <div style={{ fontSize: 12, opacity: 0.8 }}>
-                            {a.type}
-                            {a.title ? ` — ${a.title}` : ""}
-                          </div>
-                          <button
-                            className="btnSecondary"
-                            type="button"
-                            onClick={() => navigator.clipboard.writeText(a.content).catch(() => {})}
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div className="output" style={{ marginTop: 8 }}>
-                          {a.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">Analysis</div>
-                {analysisMd && (
-                  <button className="btnSecondary" onClick={() => navigator.clipboard.writeText(analysisMd).catch(() => {})} type="button">
-                    Copy
-                  </button>
-                )}
-              </div>
-              <div className="output">{analysisMd ? analysisMd : <span className="muted">(analysis will appear here)</span>}</div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">PRD</div>
-                {prdMd && (
-                  <button className="btnSecondary" onClick={() => navigator.clipboard.writeText(prdMd).catch(() => {})} type="button">
-                    Copy
-                  </button>
-                )}
-              </div>
-              <div className="output">{prdMd ? prdMd : <span className="muted">(PRD will appear here)</span>}</div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">Plan</div>
-                {planJson && (
-                  <button
-                    className="btnSecondary"
-                    onClick={() => navigator.clipboard.writeText(planJson).catch(() => {})}
-                    type="button"
-                  >
-                    Copy
-                  </button>
-                )}
-              </div>
-              <div className="output">
-                {planJson ? planJson : <span className="muted">(plan will appear here)</span>}
-              </div>
-            </div>
-
-            <div>
-              <div className="terminalHeader">
-                <div className="muted">Logs</div>
-                {runState.status === "running" && (
-                  <div className="pill">
-                    <span className="muted">streaming</span>
-                    <span className="ok">●</span>
-                  </div>
-                )}
-              </div>
-              <div className="terminal" ref={terminalRef}>
-                {logs.length === 0 ? (
-                  <span className="terminalLineDim">(logs will appear here)</span>
-                ) : (
-                  logs.map((line, idx) => {
-                    const cls =
-                      /\b(error|failed|fatal)\b/i.test(line)
-                        ? "terminalLineErr"
-                        : /\b(warn|warning)\b/i.test(line)
-                          ? "terminalLineWarn"
-                          : "terminalLine";
-                    return (
-                      <div key={idx} className={cls}>
-                        {line}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">Preview</div>
-              </div>
-              <div className="output" style={{ padding: 0, overflow: "hidden" }}>
-                {runState.status === "running" && !previewUrl ? (
-                  <div style={{ padding: 14 }} className="muted">
-                    Starting preview…
-                  </div>
-                ) : previewUrl ? (
-                  <iframe
-                    src={previewUrl}
-                    style={{ width: "100%", height: 320, border: 0, borderRadius: 16 }}
-                    title="preview"
-                  />
-                ) : (
-                  <div style={{ padding: 14 }} className="muted">
-                    (preview will appear here)
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">Review</div>
-                {reviewText && (
-                  <button
-                    className="btnSecondary"
-                    onClick={() => navigator.clipboard.writeText(reviewText).catch(() => {})}
-                    type="button"
-                  >
-                    Copy
-                  </button>
-                )}
-              </div>
-              <div className="output">
-                {reviewText ? reviewText : <span className="muted">(review will appear here)</span>}
-              </div>
-            </div>
-
-            <div>
-              <div className="sectionTitle">
-                <div className="sectionTitleText">Raw result</div>
-                {output && (
-                  <button
-                    className="btnSecondary"
-                    onClick={() => {
-                      navigator.clipboard.writeText(output).catch(() => {});
                     }}
-                    type="button"
                   >
-                    Copy
+                    Download .md
                   </button>
-                )}
-              </div>
-              <div className="output">
-                {output ? output : <span className="muted">(final output will appear here)</span>}
-              </div>
+
+                  <button className="btnSecondary" type="button" disabled title="PDF export coming next">
+                    Download .pdf (next)
+                  </button>
+                </div>
+              </section>
             </div>
-          </div>
-          </section>
+          ) : (
+            <div>
+              <section className="panel" style={{ marginTop: 16 }}>
+                <div style={{ display: "grid", gap: 12 }}>
+                  <div>
+                    <div className="sectionTitle">
+                      <div className="sectionTitleText">BMAD Chat</div>
+                      <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
+                        {bmadSession?.step?.kind === "bmad_steps" ? (
+                          <>
+                            {(bmadSession.activeSkillId || "") + " "}
+                            step {bmadSession.step.index}/{bmadSession.step.total ?? "?"}
+                            {bmadStatus ? ` • ${bmadStatus}` : ""}
+                          </>
+                        ) : (
+                          bmadStatus || ""
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="output" style={{ display: "grid", gap: 10 }}>
+                      <div className="row" style={{ flexWrap: "wrap" }}>
+                        <select
+                          className="select"
+                          value={bmadAgentSkillId}
+                          onChange={(e) => setBmadAgentSkillId(e.target.value)}
+                          disabled={!currentRunId}
+                          title="BMAD agent skill id"
+                        >
+                          {BMAD_METHOD_AGENTS.map((a) => (
+                            <option key={a.id} value={a.id}>
+                              {a.label}{a.title ? ` (${a.title})` : ""}
+                            </option>
+                          ))}
+                        </select>
+
+                        <button
+                          className="btnSecondary"
+                          type="button"
+                          onClick={() => startBmadAgent().catch((e) => setBmadStatus(e?.message || "Failed"))}
+                        >
+                          Start agent
+                        </button>
+                      </div>
+
+                      <div className="muted" style={{ fontSize: 12 }}>
+                        (Full Agent Chat restyle + send arrow CTA coming next.)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          )}
         </div>
       </div>
     </main>
