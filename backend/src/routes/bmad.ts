@@ -8,6 +8,8 @@ import { BmadSessionStore } from "../bmad/sessionStore.js";
 import { greetAgent, loadAgentMenu, advanceSession } from "../bmad/chatEngine.js";
 import type { Provider } from "../pipeline/types.js";
 import { PipelineStore } from "../pipeline/store.js";
+import { RunsStore } from "../store/runsStore.js";
+import { runtimeFetch } from "../execution/runtimeProxy.js";
 
 export const bmadRouter = Router();
 
@@ -190,6 +192,22 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
+  // If a per-run runtime container exists, proxy chat to it.
+  const run = RunsStore.get(session.runId);
+  if (run?.runtime?.hostPort) {
+    try {
+      const j = await runtimeFetch({
+        hostPort: run.runtime.hostPort,
+        path: "/bmad/sessions/start",
+        method: "POST",
+        body: { agentSkillId, provider, model }
+      });
+      return res.json({ ...j, primaryArtifactId: null });
+    } catch (e: any) {
+      return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
+    }
+  }
+
   session.agentSkillId = agentSkillId;
   BmadSessionStore.save(session);
 
@@ -222,6 +240,14 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
   const { sessionId, skillId } = parsed.data;
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
+
+  const run = RunsStore.get(session.runId);
+  if (run?.runtime?.hostPort) {
+    runtimeFetch({ hostPort: run.runtime.hostPort, path: "/bmad/sessions/select-skill", method: "POST", body: { skillId } })
+      .then((j) => res.json({ ...j, primaryArtifactId: null }))
+      .catch((e: any) => res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` }));
+    return;
+  }
   session.activeSkillId = skillId;
   // Reset step state for the selected skill; step runner will take over if skill has steps/.
   session.step = { kind: "chat", index: 0 };
@@ -248,6 +274,21 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   const { sessionId, message, provider, model, apiKey } = parsed.data;
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
+
+  const run = RunsStore.get(session.runId);
+  if (run?.runtime?.hostPort) {
+    try {
+      const j = await runtimeFetch({
+        hostPort: run.runtime.hostPort,
+        path: "/bmad/sessions/message",
+        method: "POST",
+        body: { message, provider, model }
+      });
+      return res.json({ ...j, primaryArtifactId: null });
+    } catch (e: any) {
+      return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
+    }
+  }
 
   session.messages.push({ role: "user", text: message, ts: Date.now() });
 
