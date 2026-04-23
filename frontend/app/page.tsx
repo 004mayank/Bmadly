@@ -383,8 +383,16 @@ export default function HomePage() {
       </header>
 
       <div className="appShell">
-        <aside className="sidebar">
-          <div className="sidebarTitle">BMADly</div>
+        <aside className="leftRail">
+          <div className="brandRow">
+            <div className="brandMark" />
+            <div>
+              <div className="brandName">BMADly</div>
+              <div className="brandSub">BMAD Method control UI</div>
+            </div>
+          </div>
+
+          <div className="navSectionTitle">Workspace</div>
           <button
             className={`navItem ${activeView === "environment" ? "navItemActive" : ""}`}
             type="button"
@@ -413,13 +421,18 @@ export default function HomePage() {
         </aside>
 
         <div>
-          <div className="topTabs">
+          <div className="topBar">
             <div className="tabsRow">
               <div className="tab tabActive">Execution</div>
               <div className="tab">Analytics</div>
               <div className="tab">Models</div>
             </div>
+
             <div className="row" style={{ justifyContent: "flex-end" }}>
+              <div className="badge" title="Runtime auth status">
+                <span className={currentRunId ? "ok" : "muted"}>●</span>
+                <span style={{ fontWeight: 700, fontSize: 12 }}>System Ready</span>
+              </div>
               {currentRunId && (
                 <div className="badge" title={currentRunId}>
                   <span className="muted">runId</span>
