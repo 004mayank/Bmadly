@@ -50,7 +50,9 @@ export async function pickFreePortInRange(params: { start: number; end: number }
       const srv = net.createServer();
       srv.unref();
       srv.on("error", () => resolve(false));
-      srv.listen(port, "127.0.0.1", () => {
+      // Listen on all interfaces so the check matches Docker's bind behavior.
+      // Using 127.0.0.1 can yield false positives when a port is bound on 0.0.0.0.
+      srv.listen(port, "0.0.0.0", () => {
         srv.close(() => resolve(true));
       });
     });
