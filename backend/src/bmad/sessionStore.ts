@@ -22,6 +22,15 @@ export type BmadSessionState = {
 const SESSIONS = new Map<string, BmadSessionState>();
 
 function sessionsDirForRun(runId: string) {
+  // Store sessions inside the per-run work directory so the runtime container
+  // can see the same files via the run volume mount.
+  // New location:
+  //   .bmadly/runs/<runId>/bmad-sessions/
+  return path.join(getRepoRoot(), ".bmadly", "runs", runId, "bmad-sessions");
+}
+
+// Back-compat location (older builds stored sessions globally):
+function legacySessionsDirForRun(runId: string) {
   return path.join(getRepoRoot(), ".bmadly", "bmad-sessions", runId);
 }
 
@@ -35,9 +44,12 @@ function ensureDir(p: string) {
 
 function loadFromDisk(runId: string, sessionId: string): BmadSessionState | null {
   const p = sessionPath(runId, sessionId);
-  if (!fs.existsSync(p)) return null;
+  // If missing in new path, try legacy location.
+  const legacy = path.join(legacySessionsDirForRun(runId), `${sessionId}.json`);
+  const target = fs.existsSync(p) ? p : fs.existsSync(legacy) ? legacy : null;
+  if (!target) return null;
   try {
-    const raw = fs.readFileSync(p, "utf8");
+    const raw = fs.readFileSync(target, "utf8");
     return JSON.parse(raw) as BmadSessionState;
   } catch {
     return null;
@@ -71,13 +83,28 @@ export const BmadSessionStore = {
     const inMem = SESSIONS.get(id);
     if (inMem) return inMem;
     // If not in memory, try to find on disk by scanning runs. (Cheap for MVP)
-    const base = path.join(getRepoRoot(), ".bmadly", "bmad-sessions");
-    if (!fs.existsSync(base)) return undefined;
-    for (const runId of fs.readdirSync(base)) {
-      const s = loadFromDisk(runId, id);
-      if (s) {
-        SESSIONS.set(id, s);
-        return s;
+    // New base:
+    //   .bmadly/runs/<runId>/bmad-sessions/
+    const runsBase = path.join(getRepoRoot(), ".bmadly", "runs");
+    if (fs.existsSync(runsBase)) {
+      for (const runId of fs.readdirSync(runsBase)) {
+        const s = loadFromDisk(runId, id);
+        if (s) {
+          SESSIONS.set(id, s);
+          return s;
+        }
+      }
+    }
+
+    // Legacy base fallback:
+    const legacyBase = path.join(getRepoRoot(), ".bmadly", "bmad-sessions");
+    if (fs.existsSync(legacyBase)) {
+      for (const runId of fs.readdirSync(legacyBase)) {
+        const s = loadFromDisk(runId, id);
+        if (s) {
+          SESSIONS.set(id, s);
+          return s;
+        }
       }
     }
     return undefined;
@@ -89,6 +116,21 @@ export const BmadSessionStore = {
     const dir = sessionsDirForRun(runId);
     if (fs.existsSync(dir)) {
       for (const f of fs.readdirSync(dir)) {
+        if (!f.endsWith(".json")) continue;
+        const id = f.replace(/\.json$/, "");
+        if (out.some((s) => s.id === id)) continue;
+        const s = loadFromDisk(runId, id);
+        if (s) {
+          SESSIONS.set(id, s);
+          out.push(s);
+        }
+      }
+    }
+
+    // Legacy merge
+    const legacyDir = legacySessionsDirForRun(runId);
+    if (fs.existsSync(legacyDir)) {
+      for (const f of fs.readdirSync(legacyDir)) {
         if (!f.endsWith(".json")) continue;
         const id = f.replace(/\.json$/, "");
         if (out.some((s) => s.id === id)) continue;
