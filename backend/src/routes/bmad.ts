@@ -186,14 +186,16 @@ const StartSchema = z.object({
   agentSkillId: z.string().min(1).max(200),
   provider: ProviderEnum,
   model: z.string().min(1).max(80),
-  apiKey: z.string().min(8)
+  apiKey: z.string().min(8),
+  // Optional UX helper: seed the agent with the user's project idea.
+  idea: z.string().min(1).max(2000).optional()
 });
 
 // Start an agent session: greet + return menu.
 bmadRouter.post("/bmad/sessions/start", async (req, res) => {
   const parsed = StartSchema.safeParse(req.body);
   if (!parsed.success) return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten() });
-  const { sessionId, agentSkillId, provider, model, apiKey } = parsed.data;
+  const { sessionId, agentSkillId, provider, model, apiKey, idea } = parsed.data;
   const session = BmadSessionStore.get(sessionId);
   if (!session) return res.status(404).json({ error: "Session not found" });
 
@@ -221,6 +223,14 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
 
   session.agentSkillId = agentSkillId;
   BmadSessionStore.save(session);
+
+  // Seed project context so the agent doesn't ask the user to restate it.
+  if (idea && idea.trim()) {
+    const seeded = session.messages?.some((m) => m.role === "user" && String(m.text || "").startsWith("Project:"));
+    if (!seeded) {
+      session.messages.push({ role: "user", text: `Project: ${idea.trim()}`, ts: Date.now() });
+    }
+  }
 
   const greeting = await greetAgent({ agentSkillId, llm: { provider: provider as Provider, model, apiKey } });
   session.messages.push({ role: "assistant", text: greeting, ts: Date.now() });
