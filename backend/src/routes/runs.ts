@@ -58,15 +58,36 @@ runsRouter.post("/run", async (req, res) => {
     const repoRoot = process.cwd();
     const workDirHost = path.join(repoRoot, ".bmadly", "runs", runId);
     fs.mkdirSync(workDirHost, { recursive: true });
-    const hostPort = await pickFreePortInRange({ start: 18080, end: 18999 });
-    await startRunContainer({
-      runId,
-      image: "bmadly-runtime:local",
-      hostPort,
-      runtimePort: 8080,
-      workDirHost
-    });
-    RunsStore.setRuntime(runId, { hostPort, containerPort: 8080 });
+    const image = "bmadly-runtime:local";
+    const runtimePort = 8080;
+    const maxAttempts = 12;
+
+    let started = false;
+    let hostPort: number | null = null;
+    let lastErr: any = null;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      hostPort = await pickFreePortInRange({ start: 18080, end: 18999 });
+      try {
+        RunsStore.appendLog(runId, `[runner] starting runtime container (attempt ${attempt}/${maxAttempts}) on port ${hostPort}…`);
+        await startRunContainer({ runId, image, hostPort, runtimePort, workDirHost });
+        started = true;
+        break;
+      } catch (e: any) {
+        lastErr = e;
+        const msg = String(e?.message || e);
+        const isPortBindIssue = msg.includes("port is already allocated") || msg.includes("EADDRINUSE") || msg.includes("address already in use");
+        RunsStore.appendLog(runId, `[runner] runtime start failed on port ${hostPort}: ${msg}`);
+        if (!isPortBindIssue) break;
+        // try a different port
+      }
+    }
+
+    if (!started || !hostPort) {
+      throw lastErr || new Error("runtime container failed to start");
+    }
+
+    RunsStore.setRuntime(runId, { hostPort, containerPort: runtimePort });
     RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort}`);
 
     // Start streaming container logs into RunsStore so SSE can show progress.
