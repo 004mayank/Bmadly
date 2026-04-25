@@ -24,7 +24,9 @@ export type RunRecord = {
 const runs = new Map<string, RunRecord>();
 
 const MAX_LOG_LINES = Number(process.env.MAX_LOG_LINES || 2000);
-const FINISHED_TTL_MS = Number(process.env.FINISHED_TTL_MS || 10 * 60 * 1000);
+// Keep finished runs around long enough for the UI to open Agent Chat after execution.
+// A short TTL causes "Run not found" / runtime 404s when the user switches tabs.
+const FINISHED_TTL_MS = Number(process.env.FINISHED_TTL_MS || 60 * 60 * 1000);
 
 function pruneLogs(r: RunRecord) {
   if (r.logs.length > MAX_LOG_LINES) {

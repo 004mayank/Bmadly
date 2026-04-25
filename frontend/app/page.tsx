@@ -276,6 +276,21 @@ export default function HomePage() {
       // Keep local runState so the runId badge shows up.
       setRunState({ status: "done", runId, finalStatus: "succeeded" });
     }
+
+    // Ensure the runtime container for this runId is authenticated before starting BMAD.
+    // (Agent Chat can be opened independently of the Execution tab, so we can't assume
+    // the one-time auth handshake already happened.)
+    if (apiKey.trim().length >= 8) {
+      try {
+        await fetch(`${API_BASE_URL}/api/runtime/auth`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ runId, provider, model, apiKey })
+        });
+      } catch {
+        // best-effort; backend BMAD proxy also attempts auto-auth
+      }
+    }
     // For BMAD chat: require BYOK for now.
     if (apiKey.trim().length < 8) {
       setBmadStatus("Enter your API key to start BMAD chat.");
@@ -302,7 +317,8 @@ export default function HomePage() {
     setStageDetail("");
     setBmadBusy(true);
     setBmadStatus("Starting agent…");
-    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/start`, {
+    // If the session vanished server-side (in-memory store), recreate once and retry.
+    let resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -315,6 +331,34 @@ export default function HomePage() {
         idea
       })
     });
+
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      const err = String(j?.error || "");
+      const canRetry = resp.status === 404 && err.toLowerCase().includes("session not found");
+      if (canRetry && runId) {
+        setBmadStatus("BMAD session expired; recreating…");
+        const s2 = await ensureBmadSessionForRun(runId);
+        resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/start`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: s2.id,
+            agentSkillId: bmadAgentSkillId,
+            provider,
+            model,
+            apiKey,
+            idea
+          })
+        });
+      } else {
+        setBmadBusy(false);
+        setStage("Error");
+        setStageDetail(j?.error || `Failed to start agent (${resp.status})`);
+        throw new Error(j?.error || `Failed to start agent (${resp.status})`);
+      }
+    }
+
     if (!resp.ok) {
       const j = await resp.json().catch(() => ({}));
       setBmadBusy(false);
@@ -322,6 +366,7 @@ export default function HomePage() {
       setStageDetail(j?.error || `Failed to start agent (${resp.status})`);
       throw new Error(j?.error || `Failed to start agent (${resp.status})`);
     }
+
     const j = await resp.json();
     setBmadMenu(j.menu as BmadMenuItem[]);
     setBmadSession({
@@ -337,12 +382,26 @@ export default function HomePage() {
   async function selectBmadSkill(skillId: string) {
     if (!bmadSession) return;
     setBmadStatus(`Selected ${skillId}`);
-    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/select-skill`, {
+    let resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/select-skill`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sessionId: bmadSession.id, skillId })
     });
-    const j = await resp.json().catch(() => ({}));
+    let j = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const err = String(j?.error || "");
+      const canRetry = resp.status === 404 && err.toLowerCase().includes("session not found");
+      if (canRetry && currentRunId) {
+        setBmadStatus("BMAD session expired; recreating…");
+        const s2 = await ensureBmadSessionForRun(currentRunId);
+        resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/select-skill`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: s2.id, skillId })
+        });
+        j = await resp.json().catch(() => ({}));
+      }
+    }
     if (!resp.ok) throw new Error(j?.error || `Failed to select skill (${resp.status})`);
     setBmadSession({
       ...(j.session as BmadSession),
@@ -369,7 +428,7 @@ export default function HomePage() {
     setBmadBusy(true);
     setBmadChatInput("");
     setBmadStatus("Thinking…");
-    const resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/message`, {
+    let resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/message`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -380,7 +439,29 @@ export default function HomePage() {
         apiKey
       })
     });
-    const j = await resp.json().catch(() => ({}));
+
+    let j = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+      const err = String(j?.error || "");
+      const canRetry = resp.status === 404 && err.toLowerCase().includes("session not found");
+      if (canRetry && currentRunId) {
+        setBmadStatus("BMAD session expired; recreating…");
+        const s2 = await ensureBmadSessionForRun(currentRunId);
+        resp = await fetch(`${API_BASE_URL}/api/bmad/sessions/message`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sessionId: s2.id,
+            message: msg,
+            provider,
+            model,
+            apiKey
+          })
+        });
+        j = await resp.json().catch(() => ({}));
+      }
+    }
+
     if (!resp.ok) {
       setBmadBusy(false);
       const msg = j?.error || `BMAD message failed (${resp.status})`;
@@ -444,6 +525,13 @@ export default function HomePage() {
     }
 
     try {
+      // Prevent accidental double-starts (can create multiple runtime containers).
+      if (runState.status === "running") {
+        setStage("Running pipeline");
+        setStageDetail("Already running");
+        return;
+      }
+
       const resp = await fetch(`${API_BASE_URL}/api/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -463,6 +551,8 @@ export default function HomePage() {
 
       const data = (await resp.json()) as RunResponse;
       setRunState({ status: "running", runId: data.runId });
+
+      // Pinning: currentRunId is derived from runState; keep runState authoritative.
 
       // Nudge user into Agent Chat after execution begins.
       setRunBanner({

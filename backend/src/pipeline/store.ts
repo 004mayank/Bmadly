@@ -19,7 +19,8 @@ export type PipelineRecord = {
 const runs = new Map<string, PipelineRecord>();
 
 const MAX_LOG_LINES = Number(process.env.MAX_LOG_LINES || 4000);
-const FINISHED_TTL_MS = Number(process.env.FINISHED_TTL_MS || 20 * 60 * 1000);
+// Keep finished pipeline runs around long enough for users to inspect artifacts after completion.
+const FINISHED_TTL_MS = Number(process.env.FINISHED_TTL_MS || 60 * 60 * 1000);
 
 function pruneLogs(r: PipelineRecord) {
   if (r.logs.length > MAX_LOG_LINES) r.logs = r.logs.slice(r.logs.length - MAX_LOG_LINES);
