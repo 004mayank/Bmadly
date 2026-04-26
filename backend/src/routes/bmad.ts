@@ -270,6 +270,9 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
         method: "POST",
         body: { ...req.body, sessionId: runtimeSessionId }
       });
+      // Replace the runtime session id with the host session id so the frontend
+      // sends the host id on subsequent calls (which the host can look up).
+      if (proxied?.session) proxied.session = { ...proxied.session, id: session.id, runId: session.runId };
       return res.json(proxied);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
@@ -333,7 +336,10 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
           })
         )
       )
-      .then((j) => res.json(j))
+      .then((j) => {
+        if (j?.session) j.session = { ...j.session, id: session.id, runId: session.runId };
+        return res.json(j);
+      })
       .catch((e: any) => res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` }));
     return;
   }
