@@ -26,6 +26,23 @@ async function waitForRuntime(runId: string, timeoutMs = 60_000): Promise<number
   throw new Error(`Runtime container for run ${runId} did not become ready within ${timeoutMs}ms`);
 }
 
+// Get the existing runtime session ID for a host session, or create one if missing.
+// Persisted on the host session so all proxy calls reuse the same container session.
+async function getOrCreateRuntimeSession(session: import("../bmad/sessionStore.js").BmadSessionState, hostPort: number): Promise<string> {
+  if (session.runtimeSessionId) return session.runtimeSessionId;
+  const j = await runtimeFetch({
+    hostPort,
+    path: "/api/bmad/sessions",
+    method: "POST",
+    body: { runId: session.runId }
+  });
+  const runtimeSessionId = String(j?.session?.id || "");
+  if (!runtimeSessionId) throw new Error("Runtime did not return a session id");
+  session.runtimeSessionId = runtimeSessionId;
+  BmadSessionStore.save(session);
+  return runtimeSessionId;
+}
+
 export const bmadRouter = Router();
 
 async function ensureRuntimeAuthed(params: {
@@ -246,23 +263,12 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
         apiKey
       });
 
-      const j = await runtimeFetch({
-        hostPort,
-        path: "/api/bmad/sessions",
-        method: "POST",
-        body: { runId: session.runId }
-      });
-      const runtimeSessionId = String(j?.session?.id || "");
-      if (!runtimeSessionId) throw new Error("Runtime did not return a session id");
-
+      const runtimeSessionId = await getOrCreateRuntimeSession(session, hostPort);
       const proxied = await runtimeFetch({
         hostPort,
         path: "/api/bmad/sessions/start",
         method: "POST",
-        body: {
-          ...req.body,
-          sessionId: runtimeSessionId
-        }
+        body: { ...req.body, sessionId: runtimeSessionId }
       });
       return res.json(proxied);
     } catch (e: any) {
@@ -318,17 +324,14 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
     // Translate host sessionId -> runtime sessionId (runtime has its own in-memory session store).
     waitForRuntime(session.runId, 60_000)
       .then((hostPort) =>
-        runtimeFetch({ hostPort, path: "/api/bmad/sessions", method: "POST", body: { runId: session.runId } })
-          .then((created) => {
-            const runtimeSessionId = String(created?.session?.id || "");
-            if (!runtimeSessionId) throw new Error("Runtime did not return a session id");
-            return runtimeFetch({
-              hostPort,
-              path: "/api/bmad/sessions/select-skill",
-              method: "POST",
-              body: { ...req.body, sessionId: runtimeSessionId }
-            });
+        getOrCreateRuntimeSession(session, hostPort).then((runtimeSessionId) =>
+          runtimeFetch({
+            hostPort,
+            path: "/api/bmad/sessions/select-skill",
+            method: "POST",
+            body: { ...req.body, sessionId: runtimeSessionId }
           })
+        )
       )
       .then((j) => res.json(j))
       .catch((e: any) => res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` }));
@@ -382,14 +385,7 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
         apiKey
       });
 
-      const created = await runtimeFetch({
-        hostPort,
-        path: "/api/bmad/sessions",
-        method: "POST",
-        body: { runId: session.runId }
-      });
-      const runtimeSessionId = String(created?.session?.id || "");
-      if (!runtimeSessionId) throw new Error("Runtime did not return a session id");
+      const runtimeSessionId = await getOrCreateRuntimeSession(session, hostPort);
       const j = await runtimeFetch({
         hostPort,
         path: "/api/bmad/sessions/message",

@@ -17,6 +17,8 @@ export type BmadSessionState = {
   stepContext?: Record<string, any>;
   messages: BmadChatMessage[];
   artifacts: Array<{ id: string; type: string; title?: string; content: string; createdAt: number }>;
+  // Persisted runtime session ID so all proxy calls reuse the same container session.
+  runtimeSessionId?: string;
 };
 
 const SESSIONS = new Map<string, BmadSessionState>();
