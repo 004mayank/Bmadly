@@ -219,6 +219,23 @@ export default function HomePage() {
     bmadChatRef.current?.scrollTo({ top: bmadChatRef.current.scrollHeight });
   }, [bmadSession?.messages?.length]);
 
+  // When a session is loaded/resumed and the last assistant message is a deferred
+  // response ("I'll prepare…", "give me a moment", etc.), auto-continue immediately.
+  useEffect(() => {
+    if (!bmadSession || bmadBusy) return;
+    const lastMsg = bmadSession.messages?.filter(m => m.role === "assistant").slice(-1)[0];
+    if (!lastMsg) return;
+    if (AUTO_CONTINUE_RE.test(lastMsg.text)) {
+      setStage("Agent thinking");
+      setStageDetail("Agent is preparing response…");
+      const t = setTimeout(() => {
+        sendBmadChat("continue", true).catch(() => {});
+      }, 800);
+      return () => clearTimeout(t);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bmadSession?.id]);
+
   useEffect(() => {
     if (!startedAt) return;
     const t = setInterval(() => {
