@@ -326,3 +326,8 @@ h1{font-size:34px;margin:0 0 6px 0;letter-spacing:-0.03em;line-height:1.1}
 
 .split2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 @media (max-width: 920px){.split2{grid-template-columns:1fr}}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 3px rgba(245,158,11,0.3); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(245,158,11,0.1); }
+}

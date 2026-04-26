@@ -1116,28 +1116,29 @@ export default function HomePage() {
                   <section className="card">
                     <div className="cardTitle">
                       <div className="cardTitleText">BMAD CHAT INTERFACE</div>
-                      <div className="muted" style={{ fontSize: 12, textAlign: "right" }}>
-                        {bmadSession?.step?.kind === "bmad_steps" ? (
-                          <>
-                            {(bmadSession.activeSkillId || "") + " "}
-                            step {bmadSession.step.index}/{bmadSession.step.total ?? "?"}
-                            {bmadStatus ? ` • ${bmadStatus}` : ""}
-                          </>
-                        ) : (
-                          bmadStatus || ""
-                        )}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                        <span style={{
+                          width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+                          background: stage === "Error" ? "#ef4444"
+                            : bmadBusy ? "#f59e0b"
+                            : bmadSession ? "#22c55e"
+                            : "#6b7280",
+                          boxShadow: bmadBusy ? "0 0 0 3px rgba(245,158,11,0.3)" : undefined,
+                          animation: bmadBusy ? "pulse 1.2s ease-in-out infinite" : undefined
+                        }} />
+                        <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: stage === "Error" ? "#ef4444" : bmadBusy ? "#f59e0b" : "inherit" }}>
+                          {stage === "Error" ? (stageDetail || "Error")
+                            : stage === "Agent thinking" ? "Agent thinking…"
+                            : stage === "Starting agent" ? "Starting agent…"
+                            : stage === "Authenticating runtime" ? "Authenticating…"
+                            : stage === "Starting runtime" ? "Starting runtime…"
+                            : stage === "Creating run" ? "Creating run…"
+                            : bmadSession?.step?.kind === "bmad_steps"
+                              ? `${bmadSession.activeSkillId || "skill"} · step ${bmadSession.step.index}/${bmadSession.step.total ?? "?"}`
+                            : bmadSession ? "Ready"
+                            : "Not started"}
+                        </span>
                       </div>
-                    </div>
-
-                    <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                      {stage !== "Idle" ? (
-                        <>
-                          Status: <span style={{ fontFamily: "var(--mono)", fontWeight: 800 }}>{stage}</span>
-                          {stageDetail ? <span style={{ fontFamily: "var(--mono)" }}> • {stageDetail}</span> : null}
-                        </>
-                      ) : (
-                        <>Status: <span style={{ fontFamily: "var(--mono)" }}>Ready</span></>
-                      )}
                     </div>
 
                     {bmadErrorBanner ? (
