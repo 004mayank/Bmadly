@@ -421,7 +421,9 @@ export default function HomePage() {
     });
   }
 
-  async function sendBmadChat(overrideMessage?: string) {
+  const AUTO_CONTINUE_RE = /i'?ll (now |)(prepare|outline|draft|create|generate|summarize|compile|write|gather|work on|proceed|begin|start)|give me a moment|stand by|one moment|i will now|let me (now |)(prepare|create|draft|generate|summarize|outline|compile|gather)|working on it/i;
+
+  async function sendBmadChat(overrideMessage?: string, isAutoContinue = false) {
     if (!bmadSession) {
       setBmadStatus("Start an agent first.");
       return;
@@ -490,12 +492,24 @@ export default function HomePage() {
       fetchBmadDebug((j.session as BmadSession).id).catch(() => {});
     }
     setBmadBusy(false);
-    setStage("Done");
-    setStageDetail("Response received");
-    setTimeout(() => {
-      setStage("Idle");
-      setStageDetail("");
-    }, 2000);
+
+    const lastText = String((j.session as BmadSession)?.messages?.filter((m: any) => m.role === "assistant").slice(-1)[0]?.text || "");
+    const shouldAutoContinue = !isAutoContinue && AUTO_CONTINUE_RE.test(lastText);
+
+    if (shouldAutoContinue) {
+      setStage("Agent thinking");
+      setStageDetail("Agent is preparing response…");
+      setTimeout(() => {
+        sendBmadChat("continue", true).catch(() => {});
+      }, 1200);
+    } else {
+      setStage("Done");
+      setStageDetail("Response received");
+      setTimeout(() => {
+        setStage("Idle");
+        setStageDetail("");
+      }, 2000);
+    }
   }
 
   async function fetchBmadDebug(sessionId: string) {
@@ -1132,6 +1146,7 @@ export default function HomePage() {
                         <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: stage === "Error" ? "#ef4444" : bmadBusy ? "#f59e0b" : stage === "Done" ? "#22c55e" : "inherit" }}>
                           {stage === "Error" ? (stageDetail || "Error")
                             : stage === "Done" ? "Response received"
+                            : stage === "Agent thinking" && stageDetail ? stageDetail
                             : stage === "Agent thinking" ? "Agent thinking…"
                             : stage === "Starting agent" ? "Starting agent…"
                             : stage === "Authenticating runtime" ? "Authenticating…"
@@ -1179,16 +1194,6 @@ export default function HomePage() {
                         SEND
                       </button>
                     </div>
-                    {(() => {
-                      const lastMsg = bmadSession?.messages?.filter(m => m.role === "assistant").slice(-1)[0];
-                      const needsContinue = lastMsg && !bmadBusy && /give me a moment|gathering|let me|i'll now|i will now|working on|stand by|one moment|summarize the findings/i.test(lastMsg.text);
-                      return needsContinue ? (
-                        <div style={{ marginTop: 8, fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ color: "#f59e0b" }}>↑</span>
-                          Agent is waiting — send a follow-up (e.g. <button className="btnSecondary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => sendBmadChat("continue").catch(() => {})}>continue</button>) to get the full output.
-                        </div>
-                      ) : null;
-                    })()}
                   </section>
 
                   <section className="card">
