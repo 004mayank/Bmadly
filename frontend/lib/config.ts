@@ -3,18 +3,17 @@ export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://loca
 export const PROVIDERS = [
   {
     id: "openai",
-    label: "OpenAI",
-    models: ["gpt-4o-mini", "gpt-4o"]
+    label: "OpenAI Architecture",
+    models: ["gpt-4-turbo-preview", "gpt-4o", "gpt-4o-mini"]
   },
   {
     id: "anthropic",
-    label: "Anthropic",
-    models: ["claude-3-5-sonnet", "claude-3-5-haiku"]
+    label: "Anthropic Claude",
+    models: ["claude-3-5-sonnet", "claude-3-5-haiku", "claude-3-opus"]
   },
   {
     id: "gemini",
-    label: "Gemini",
-    // Use Gemini API model ids (v1beta models/<id>)
+    label: "Google Gemini",
     models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash", "gemini-1.5-pro"]
   }
 ] as const;

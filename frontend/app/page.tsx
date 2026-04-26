@@ -167,35 +167,47 @@ export default function HomePage() {
     if (apiKey.trim().length < 8) return;
     setKeyStatus("testing");
     setKeyStatusMsg("Testing…");
+    setLogs((l) => [...l, `[ui] testing ${provider} key…`]);
     try {
-      // Use runtime auth as a lightweight key check.
-      // Needs a runId; create one if none exists.
-      let runId = currentRunId;
-      if (!runId) {
-        const r = await fetch(`${API_BASE_URL}/api/pipeline/create`, { method: "POST" });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error(j?.error || `Failed to create run (${r.status})`);
-        runId = String(j.runId);
-        // keep a runId badge so Agent tab can activate
-        setRunState({ status: "done", runId, finalStatus: "succeeded" });
+      if (provider === "openai") {
+        const r = await fetch("https://api.openai.com/v1/models", {
+          headers: { Authorization: `Bearer ${apiKey}` }
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j?.error?.message || `Authentication failed (${r.status})`);
+        }
+      } else if (provider === "anthropic") {
+        // Anthropic supports direct browser access with this header
+        const r = await fetch("https://api.anthropic.com/v1/models", {
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+          }
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j?.error?.message || `Authentication failed (${r.status})`);
+        }
+      } else if (provider === "gemini") {
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`
+        );
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          throw new Error(j?.error?.message || `Authentication failed (${r.status})`);
+        }
       }
 
-      const ar = await fetch(`${API_BASE_URL}/api/runtime/auth`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId, provider, model, apiKey })
-      });
-      const aj = await ar.json().catch(() => ({}));
-      if (!ar.ok) throw new Error(aj?.error || `Auth failed (${ar.status})`);
-
-      // Only consider the key verified once it is also saved.
       setKeyStatus("ok");
-      setKeyStatusMsg("Key OK (save to enable Agent Chat)");
+      setKeyStatusMsg("Test successful");
       setLogs((l) => [...l, "[ui] key test succeeded"]);
     } catch (e: any) {
+      const msg = e?.message || "Test failed";
       setKeyStatus("error");
-      setKeyStatusMsg(e?.message || "Test failed");
-      setLogs((l) => [...l, `[ui] key test failed: ${e?.message || "error"}`]);
+      setKeyStatusMsg(msg);
+      setLogs((l) => [...l, `[ui] key test failed: ${msg}`]);
     }
   }
 
@@ -683,20 +695,52 @@ export default function HomePage() {
   return (
     <main className="containerFull">
 
+      {/* Full-width header spanning the entire viewport */}
+      <header className="fullHeader">
+        <div className="brandArea">
+          <div className="brandMark" />
+          <span className="brandName" style={{ fontSize: 14, fontWeight: 900, letterSpacing: 0.5 }}>Bmadly</span>
+        </div>
+        <div className="tabsRow">
+          <div className="tab tabActive">EXECUTION</div>
+          <div className="tab">ANALYTICS</div>
+          <div className="tab">MODELS</div>
+        </div>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="iconBtn" type="button" title="Grid view">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="9" y="1" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="1" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><rect x="9" y="9" width="6" height="6" rx="1.5" stroke="currentColor" strokeWidth="1.3"/></svg>
+          </button>
+          <button className="iconBtn" type="button" title="Notifications">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a4.5 4.5 0 00-4.5 4.5c0 2.5-.5 3.5-1 4h11c-.5-.5-1-1.5-1-4A4.5 4.5 0 008 2z" stroke="currentColor" strokeWidth="1.3"/><path d="M6.5 13.5a1.5 1.5 0 003 0" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+          </button>
+          <button className="iconBtn" type="button" title="Messages">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="9" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4.5 11.5L3 14l3-1.5" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" strokeLinejoin="round"/><path d="M4.5 6.5h7M4.5 8.5h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+          </button>
+          <button className="btnRun" type="button" onClick={startRun} disabled={isRunning} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="currentColor"/></svg>
+            RUN BMAD
+          </button>
+        </div>
+      </header>
+
       <div className="appShell">
         <aside className="leftRail">
-          <div className="brandRow">
-            <div>
-              <div className="brandName" style={{ fontSize: 22, letterSpacing: 0.2 }}>BMADly</div>
-            </div>
-          </div>
-
-          <div className="railBlock">
+          <div className="railBlock" style={{ marginTop: 0 }}>
             <div className="railBlockTitle">MISSION_CONTROL</div>
-            <div className="railBlockSub">v0.1.0</div>
+            <div className="railBlockSub">V.2.0.4-STABLE</div>
           </div>
           <button className={`navItem ${activeView === "environment" ? "navItemActive" : ""}`} type="button" onClick={() => setActiveView("environment")}>
-            <span>Environment</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ opacity: 0.85 }}>
+                <rect x="1" y="2" width="13" height="1.5" rx="0.75" fill="currentColor"/>
+                <circle cx="4.5" cy="2.75" r="1.5" fill="currentColor"/>
+                <rect x="1" y="6.75" width="13" height="1.5" rx="0.75" fill="currentColor"/>
+                <circle cx="10.5" cy="7.5" r="1.5" fill="currentColor"/>
+                <rect x="1" y="11.5" width="13" height="1.5" rx="0.75" fill="currentColor"/>
+                <circle cx="6.5" cy="12.25" r="1.5" fill="currentColor"/>
+              </svg>
+              Environment
+            </span>
           </button>
           <button
             className={`navItem ${activeView === "agents" ? "navItemActive" : ""} ${!canOpenAgentChat ? "navItemDisabled" : ""}`}
@@ -704,7 +748,17 @@ export default function HomePage() {
             disabled={!canOpenAgentChat}
             onClick={() => canOpenAgentChat && setActiveView("agents")}
           >
-            <span>Agent Chat</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ opacity: 0.85 }}>
+                <rect x="2" y="4" width="11" height="8" rx="2" stroke="currentColor" strokeWidth="1.3" fill="none"/>
+                <circle cx="5" cy="8" r="1" fill="currentColor"/>
+                <circle cx="10" cy="8" r="1" fill="currentColor"/>
+                <path d="M5.5 11c.5.7 3.5.7 4 0" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+                <path d="M7.5 4V2.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                <circle cx="7.5" cy="2" r="0.7" fill="currentColor"/>
+              </svg>
+              Agent Chat
+            </span>
           </button>
           <button
             className={`navItem ${activeView === "export" ? "navItemActive" : ""} ${!currentRunId ? "navItemDisabled" : ""}`}
@@ -712,30 +766,43 @@ export default function HomePage() {
             disabled={!currentRunId}
             onClick={() => currentRunId && setActiveView("export")}
           >
-            <span>Export</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <svg width="15" height="15" viewBox="0 0 15 15" fill="none" style={{ opacity: 0.85 }}>
+                <path d="M7.5 1.5v8M4.5 6.5l3 3 3-3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M2 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              Export
+            </span>
           </button>
+
+          <div style={{ flex: 1 }} />
+
+          <button
+            className="btnNextAgent"
+            type="button"
+            onClick={() => canOpenAgentChat && setActiveView("agents")}
+            disabled={!canOpenAgentChat}
+          >
+            NEXT AGENT
+          </button>
+
+          <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 12, display: "grid", gap: 4, marginTop: 12 }}>
+            <button className="navItem" type="button" style={{ opacity: 0.6, fontSize: 12 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="1.2"/><path d="M6.5 5.5v4M6.5 3.5h.01" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                Documentation
+              </span>
+            </button>
+            <button className="navItem" type="button" style={{ opacity: 0.6, fontSize: 12 }}>
+              <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="3" width="11" height="8" rx="1.5" stroke="currentColor" strokeWidth="1.2"/><path d="M3 6h7M3 8.5h4" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/></svg>
+                System Logs
+              </span>
+            </button>
+          </div>
         </aside>
 
         <div>
-          <div className="topBar">
-            <div className="tabsRow">
-              <div className="tab tabActive">EXECUTION</div>
-              <div className="tab">ANALYTICS</div>
-              <div className="tab">MODELS</div>
-            </div>
-
-            <div className="row" style={{ justifyContent: "flex-end" }}>
-              <div className="chip">
-                <span className={currentRunId ? "ok" : "muted"}>●</span>
-                <span>System Ready</span>
-              </div>
-              <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 12, marginRight: 10 }}>Latency: 24ms</div>
-              <button className="btnRun" type="button" onClick={startRun} disabled={isRunning}>
-                RUN BMAD
-              </button>
-            </div>
-          </div>
-
           {activeView === "environment" ? (
             <div style={{ padding: "0 22px 22px" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
@@ -781,65 +848,84 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <label className="label">Product idea</label>
+                  <label className="label">Describe your product</label>
                   <textarea
                     className="input"
                     value={idea}
                     disabled={isRunning}
                     onChange={(e) => setIdea(e.target.value)}
-                    placeholder="Describe the product you want to generate…"
+                    placeholder="Describe the product you want to build — BMAD agents will use this as their primary context…"
                     style={{ minHeight: 92, resize: "vertical" }}
                   />
 
                   <label className="label">API Key</label>
-                  <input className="input" type="password" value={apiKey} disabled={isRunning} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-…" />
-                  <div className="row" style={{ marginTop: 10, gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
-                    <button
-                      className="btnSecondary"
-                      type="button"
-                      disabled={isRunning || apiKey.trim().length < 8 || keyStatus === "testing"}
-                      onClick={testApiKey}
-                      title="Validates your key by attempting a runtime auth handshake."
-                    >
-                      TEST KEY
-                    </button>
-                    <button
-                      className="btnSecondary"
-                      type="button"
-                      disabled={isRunning || apiKey.trim().length < 8 || keyStatus === "testing"}
-                      onClick={saveApiKey}
-                      title="Stores your key in this browser only (localStorage)."
-                    >
-                      SAVE KEY
-                    </button>
-                    <div className="pill" title={keyStatusMsg || ""}>
-                      <span className={keyStatus === "saved" || keyStatus === "ok" ? "ok" : keyStatus === "error" ? "err" : "muted"}>●</span>
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        {keyStatus === "saved"
-                          ? "Saved"
-                          : keyStatus === "ok"
-                            ? "Key OK"
-                            : keyStatus === "testing"
-                              ? "Testing"
-                              : keyStatus === "dirty"
-                                ? "Not saved"
-                                : keyStatus === "error"
-                                  ? "Error"
-                                  : ""}
-                      </span>
+
+                  {keyStatus === "saved" ? (
+                    <div className="inputMasked">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none" style={{ flexShrink: 0, opacity: 0.5 }}>
+                        <rect x="2" y="5.5" width="9" height="6.5" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                        <path d="M4 5.5V4a2.5 2.5 0 015 0v1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                      </svg>
+                      <span>{"sk-" + "•".repeat(36)}</span>
                     </div>
-                    <button
-                      className="btnSecondary"
-                      type="button"
-                      disabled={isRunning}
-                      onClick={clearSavedApiKey}
-                      title="Clears the saved key for this provider from this browser."
-                    >
-                      CLEAR
-                    </button>
+                  ) : (
+                    <input
+                      className="input"
+                      type="password"
+                      value={apiKey}
+                      disabled={isRunning || keyStatus === "testing"}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="sk-…"
+                    />
+                  )}
+
+                  <div className="row" style={{ marginTop: 10, justifyContent: "space-between", alignItems: "center", minHeight: 34 }}>
+                    <div className="row" style={{ gap: 7 }}>
+                      {keyStatus !== "idle" && (
+                        <>
+                          <span
+                            style={{ fontSize: 9 }}
+                            className={keyStatus === "saved" || keyStatus === "ok" ? "ok" : keyStatus === "error" ? "err" : "muted"}
+                          >●</span>
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            {keyStatus === "saved" ? "Saved"
+                              : keyStatus === "ok" ? "Test successful — click Save Key"
+                              : keyStatus === "testing" ? "Testing…"
+                              : keyStatus === "error" ? (keyStatusMsg || "Error")
+                              : "Not saved"}
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {(keyStatus === "dirty" || keyStatus === "testing" || keyStatus === "ok" || keyStatus === "error" || keyStatus === "saved") && (
+                      <div className="row" style={{ gap: 8 }}>
+                        {keyStatus !== "saved" && (
+                          <button
+                            className="btnRun"
+                            type="button"
+                            disabled={isRunning || keyStatus === "testing" || apiKey.trim().length < 8}
+                            onClick={keyStatus === "ok" ? saveApiKey : testApiKey}
+                            style={{ padding: "8px 14px", fontSize: 12, letterSpacing: "0.05em" }}
+                          >
+                            {keyStatus === "testing" ? "TESTING…" : keyStatus === "ok" ? "SAVE KEY" : "TEST KEY"}
+                          </button>
+                        )}
+                        <button
+                          className="btnSecondary"
+                          type="button"
+                          disabled={isRunning}
+                          onClick={clearSavedApiKey}
+                          style={{ padding: "8px 12px", fontSize: 12 }}
+                        >
+                          CLEAR
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-                    Key is stored locally in your browser (localStorage) and is not sent anywhere except to call the selected provider.
+
+                  <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                    Keys are encrypted locally and never stored on our servers.
                   </div>
 
                   <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
@@ -856,7 +942,8 @@ export default function HomePage() {
                         {runState.finalStatus.toUpperCase()} • {currentRunId}
                       </div>
                     ) : null}
-                    <button className="btnRun" type="button" onClick={startRun} disabled={isRunning}>
+                    <button className="btnRun" type="button" onClick={startRun} disabled={isRunning} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 2l9 5-9 5V2z" fill="currentColor"/></svg>
                       RUN BMAD EXECUTION
                     </button>
                   </div>
@@ -866,13 +953,14 @@ export default function HomePage() {
                   <section className="card">
                     <div className="cardTitle">
                       <div className="cardTitleText">Setup Guide</div>
+                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ opacity: 0.5 }}><path d="M2 12L12 2M12 2H6M12 2v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     </div>
                     <div className="muted" style={{ lineHeight: 1.6 }}>
                       New to BMAD? Follow the quickstart guide to calibrate your agents.
                     </div>
                     <div className="row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}>
                       <span className="badge">CORE-V2</span>
-                      <span className="badge">RUNTIME</span>
+                      <span className="badge">PYTHON-SDK</span>
                     </div>
                   </section>
 
@@ -893,6 +981,42 @@ export default function HomePage() {
                     </div>
                   </section>
                 </div>
+              </div>
+
+              {/* Bottom row: Agent Chat Ready + STDOUT_MONITOR */}
+              <div className="cards2" style={{ marginTop: 16 }}>
+                <section className="card" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 200, textAlign: "center", gap: 16 }}>
+                  <svg width="52" height="52" viewBox="0 0 52 52" fill="none" style={{ opacity: 0.45 }}>
+                    <rect x="6" y="16" width="40" height="28" rx="8" stroke="currentColor" strokeWidth="2.5"/>
+                    <circle cx="18" cy="30" r="4" fill="currentColor"/>
+                    <circle cx="34" cy="30" r="4" fill="currentColor"/>
+                    <path d="M18 40c2 3 14 3 16 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <path d="M26 16V10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/>
+                    <circle cx="26" cy="8" r="3" stroke="currentColor" strokeWidth="2"/>
+                    <path d="M16 16V12M36 16V12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                  </svg>
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Agent Chat Ready</div>
+                    <div className="muted" style={{ fontSize: 14, lineHeight: 1.6, maxWidth: 280, margin: "0 auto" }}>
+                      Initialize the environment to begin live interaction with your AI agents.
+                    </div>
+                  </div>
+                </section>
+
+                <section className="card">
+                  <div className="cardTitle">
+                    <div className="row" style={{ gap: 8 }}>
+                      <span style={{ color: "var(--ok)", fontSize: 10 }}>●</span>
+                      <div className="cardTitleText">STDOUT_MONITOR</div>
+                    </div>
+                    <button className="iconBtn" type="button" title="Expand">
+                      <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M1 12l4-4M1 12h4M1 12v-4M12 1l-4 4M12 1H8M12 1v4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    </button>
+                  </div>
+                  <div className="monoBox" style={{ minHeight: 152, color: "rgba(167,176,194,0.7)", fontSize: 11 }}>
+                    {logs.length ? logs.slice(-20).join("\n") : "WAITING FOR PROCESS INITIALIZATION..."}
+                  </div>
+                </section>
               </div>
             </div>
           ) : null}

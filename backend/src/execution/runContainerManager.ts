@@ -61,6 +61,30 @@ export async function pickFreePortInRange(params: { start: number; end: number }
   throw new Error(`No free ports in range ${start}-${end}`);
 }
 
+/** Poll the container's /api/runtime/status until it returns 200 or timeout. */
+export async function waitForContainerReady(params: {
+  hostPort: number;
+  timeoutMs?: number;
+  intervalMs?: number;
+}): Promise<void> {
+  const { hostPort, timeoutMs = 30_000, intervalMs = 500 } = params;
+  const url = `http://127.0.0.1:${hostPort}/api/runtime/status`;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), intervalMs);
+      const r = await fetch(url, { signal: ctrl.signal }).finally(() => clearTimeout(t));
+      if (r.ok) return;
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Runtime container on port ${hostPort} did not become ready within ${timeoutMs}ms`);
+}
+
 export async function stopRunContainer(runId: string): Promise<void> {
   const name = containerNameForRun(runId);
   await new Promise<void>((resolve) => {

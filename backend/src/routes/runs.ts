@@ -5,7 +5,7 @@ import { RunsStore } from "../store/runsStore.js";
 import { maskKey } from "../utils/maskKey.js";
 import path from "node:path";
 import fs from "node:fs";
-import { pickFreePortInRange, startRunContainer } from "../execution/runContainerManager.js";
+import { pickFreePortInRange, startRunContainer, waitForContainerReady } from "../execution/runContainerManager.js";
 import { tailContainerLogs } from "../execution/dockerLogsTail.js";
 
 export const runsRouter = Router();
@@ -87,11 +87,16 @@ runsRouter.post("/run", async (req, res) => {
       throw lastErr || new Error("runtime container failed to start");
     }
 
-    RunsStore.setRuntime(runId, { hostPort, containerPort: runtimePort });
-    RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort}`);
-
-    // Start streaming container logs into RunsStore so SSE can show progress.
+    // Stream logs immediately so the frontend sees container boot progress.
     tailContainerLogs({ runId, containerName: `bmadly-run-${runId}` });
+    RunsStore.appendLog(runId, `[runner] runtime container started on http://localhost:${hostPort} — waiting for ready…`);
+
+    // Block until the container's Express server accepts HTTP before we
+    // register it, so proxy calls don't race against a still-booting server.
+    await waitForContainerReady({ hostPort, timeoutMs: 40_000 });
+
+    RunsStore.setRuntime(runId, { hostPort, containerPort: runtimePort });
+    RunsStore.appendLog(runId, `[runner] runtime ready on http://localhost:${hostPort}`);
   } catch (e: any) {
     RunsStore.appendLog(runId, `[runner] runtime container failed to start: ${String(e?.message || e)}`);
   }
