@@ -281,7 +281,12 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
     }
   }
 
-  const greeting = await greetAgent({ agentSkillId, llm: { provider: provider as Provider, model, apiKey } });
+  let greeting: string;
+  try {
+    greeting = await greetAgent({ agentSkillId, llm: { provider: provider as Provider, model, apiKey } });
+  } catch (e: any) {
+    return res.status(502).json({ error: `Agent greeting failed: ${String(e?.message || e)}` });
+  }
   session.messages.push({ role: "assistant", text: greeting, ts: Date.now() });
 
   const menu = loadAgentMenu(agentSkillId);
@@ -292,8 +297,6 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
     greeting,
     menu,
     session,
-    // Canonical "current document" pointer for the UI (single source of truth).
-    // Frontend should prefer this over any skillId→type mapping.
     primaryArtifactId: session.stepContext?.docArtifactId ?? null
   });
 });

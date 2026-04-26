@@ -4,7 +4,7 @@ export const PROVIDERS = [
   {
     id: "openai",
     label: "OpenAI Architecture",
-    models: ["gpt-4-turbo-preview", "gpt-4o", "gpt-4o-mini"]
+    models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"]
   },
   {
     id: "anthropic",
