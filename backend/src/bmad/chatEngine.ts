@@ -331,6 +331,7 @@ export async function advanceSession(params: {
       : session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +
     (session.activeSkillId ? `Current BMAD skill: ${session.activeSkillId}. ` : "") +
     `You are operating inside a chat UI. Ask one question at a time. If you need more info, ask a focused question. ` +
+    `CRITICAL OUTPUT RULE: Whenever you produce a document, report, research, analysis, PRD, or any substantial written artifact, you MUST include the full content in the JSON "artifact" field as { "type": "<doc-type>", "title": "<title>", "content": "<full markdown content>" }. The "text" field should only be a short summary sentence. NEVER say a document is "ready" or "compiled" without including its actual content in "artifact.content". ` +
     (guided
       ? `You MUST follow this BMAD guided elicitation prompt as closely as possible (treat it as authoritative instructions):\n\n${guided}\n\n`
       : "") +
@@ -351,11 +352,17 @@ export async function advanceSession(params: {
       `{ "text": "string", "artifact": null | { "type": "string", "title": "string?", "content": "string" } }`
   });
 
-  // If agent menu entry uses a prompt like:
-  //   "Read and follow the instructions in {skill-root}/some-file.md"
-  // resolve it by inlining the referenced file content as additional system context.
-  // This keeps prompts declarative in customize.toml while ensuring the model
-  // actually sees the instructions.
   const text = String((r as any)?.text ?? "").trim();
+
+  // Save artifact to session if LLM produced one.
+  const artRaw = (r as any)?.artifact;
+  if (artRaw?.content && String(artRaw.content).trim().length > 50) {
+    upsertSessionArtifact(session, {
+      type: String(artRaw.type || "document"),
+      title: artRaw.title ? String(artRaw.title) : undefined,
+      content: String(artRaw.content)
+    });
+  }
+
   return { ...(r as any), text };
 }

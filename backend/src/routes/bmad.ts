@@ -459,8 +459,8 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
   res.json({
     ok: true,
     text,
-    artifact: null,
+    artifact: (r as any)?.artifact ?? null,
     session,
-    primaryArtifactId: session.stepContext?.docArtifactId ?? null
+    primaryArtifactId: session.stepContext?.docArtifactId ?? session.artifacts.slice(-1)[0]?.id ?? null
   });
 });
