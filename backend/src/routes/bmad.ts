@@ -26,6 +26,22 @@ async function waitForRuntime(runId: string, timeoutMs = 60_000): Promise<number
   throw new Error(`Runtime container for run ${runId} did not become ready within ${timeoutMs}ms`);
 }
 
+// Sync messages/artifacts from a runtime proxy response back to the host session so
+// they survive container restarts and page refreshes.
+function syncRuntimeSession(
+  hostSession: import("../bmad/sessionStore.js").BmadSessionState,
+  runtimeSession: any
+) {
+  if (!runtimeSession) return;
+  if (Array.isArray(runtimeSession.messages)) hostSession.messages = runtimeSession.messages;
+  if (Array.isArray(runtimeSession.artifacts)) hostSession.artifacts = runtimeSession.artifacts;
+  if (runtimeSession.agentSkillId) hostSession.agentSkillId = runtimeSession.agentSkillId;
+  if (runtimeSession.activeSkillId) hostSession.activeSkillId = runtimeSession.activeSkillId;
+  if (runtimeSession.step) hostSession.step = runtimeSession.step;
+  if (runtimeSession.stepContext) hostSession.stepContext = runtimeSession.stepContext;
+  BmadSessionStore.save(hostSession);
+}
+
 // Get the existing runtime session ID for a host session, or create one if missing.
 // Persisted on the host session so all proxy calls reuse the same container session.
 async function getOrCreateRuntimeSession(session: import("../bmad/sessionStore.js").BmadSessionState, hostPort: number): Promise<string> {
@@ -272,7 +288,10 @@ bmadRouter.post("/bmad/sessions/start", async (req, res) => {
       });
       // Replace the runtime session id with the host session id so the frontend
       // sends the host id on subsequent calls (which the host can look up).
-      if (proxied?.session) proxied.session = { ...proxied.session, id: session.id, runId: session.runId };
+      if (proxied?.session) {
+        syncRuntimeSession(session, proxied.session);
+        proxied.session = { ...proxied.session, id: session.id, runId: session.runId };
+      }
       return res.json(proxied);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
@@ -337,7 +356,10 @@ bmadRouter.post("/bmad/sessions/select-skill", (req, res) => {
         )
       )
       .then((j) => {
-        if (j?.session) j.session = { ...j.session, id: session.id, runId: session.runId };
+        if (j?.session) {
+          syncRuntimeSession(session, j.session);
+          j.session = { ...j.session, id: session.id, runId: session.runId };
+        }
         return res.json(j);
       })
       .catch((e: any) => res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` }));
@@ -398,7 +420,10 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
         method: "POST",
         body: { ...req.body, sessionId: runtimeSessionId }
       });
-      if (j?.session) j.session = { ...j.session, id: session.id, runId: session.runId };
+      if (j?.session) {
+        syncRuntimeSession(session, j.session);
+        j.session = { ...j.session, id: session.id, runId: session.runId };
+      }
       return res.json(j);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
