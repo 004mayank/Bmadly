@@ -1139,7 +1139,7 @@ export default function HomePage() {
                             : stage === "Creating run" ? "Creating run…"
                             : bmadSession?.step?.kind === "bmad_steps"
                               ? `${bmadSession.activeSkillId || "skill"} · step ${bmadSession.step.index}/${bmadSession.step.total ?? "?"}`
-                            : bmadSession ? "Ready"
+                            : bmadSession ? "Waiting for your input"
                             : "Not started"}
                         </span>
                       </div>
@@ -1179,6 +1179,16 @@ export default function HomePage() {
                         SEND
                       </button>
                     </div>
+                    {(() => {
+                      const lastMsg = bmadSession?.messages?.filter(m => m.role === "assistant").slice(-1)[0];
+                      const needsContinue = lastMsg && !bmadBusy && /give me a moment|gathering|let me|i'll now|i will now|working on|stand by|one moment|summarize the findings/i.test(lastMsg.text);
+                      return needsContinue ? (
+                        <div style={{ marginTop: 8, fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ color: "#f59e0b" }}>↑</span>
+                          Agent is waiting — send a follow-up (e.g. <button className="btnSecondary" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => sendBmadChat("continue").catch(() => {})}>continue</button>) to get the full output.
+                        </div>
+                      ) : null;
+                    })()}
                   </section>
 
                   <section className="card">
