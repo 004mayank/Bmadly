@@ -292,7 +292,7 @@ export default function HomePage() {
       setStage("Agent thinking");
       setStageDetail("Agent is preparing response…");
       const t = setTimeout(() => {
-        sendBmadChat("continue", true).catch(() => {});
+        sendBmadChat("continue", 1).catch(() => {});
       }, 800);
       return () => clearTimeout(t);
     }
@@ -503,7 +503,7 @@ export default function HomePage() {
 
   const AUTO_CONTINUE_RE = /i'?ll (now |)(prepare|outline|draft|create|generate|summarize|compile|write|gather|work on|proceed|begin|start)|give me a moment|stand by|one moment|i will now|let me (now |)(prepare|create|draft|generate|summarize|outline|compile|gather)|working on it/i;
 
-  async function sendBmadChat(overrideMessage?: string, isAutoContinue = false) {
+  async function sendBmadChat(overrideMessage?: string, autoContinueDepth = 0) {
     if (!bmadSession) {
       setBmadStatus("Start an agent first.");
       return;
@@ -574,13 +574,14 @@ export default function HomePage() {
     setBmadBusy(false);
 
     const lastText = String((j.session as BmadSession)?.messages?.filter((m: any) => m.role === "assistant").slice(-1)[0]?.text || "");
-    const shouldAutoContinue = !isAutoContinue && AUTO_CONTINUE_RE.test(lastText);
+    const MAX_AUTO_CONTINUES = 4;
+    const shouldAutoContinue = autoContinueDepth < MAX_AUTO_CONTINUES && AUTO_CONTINUE_RE.test(lastText);
 
     if (shouldAutoContinue) {
       setStage("Agent thinking");
-      setStageDetail("Agent is preparing response…");
+      setStageDetail("Generating…");
       setTimeout(() => {
-        sendBmadChat("continue", true).catch(() => {});
+        sendBmadChat("continue", autoContinueDepth + 1).catch(() => {});
       }, 1200);
     } else {
       setStage("Done");
