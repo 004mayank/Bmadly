@@ -97,12 +97,42 @@ function ensureFrontmatter(content: string, meta: Record<string, any>) {
   return fm + rest;
 }
 
+// Parse the Capabilities markdown table from SKILL.md (BMAD-METHOD 6.x format).
+// Falls back to customize.toml (5.x format) if present.
+function parseCapabilitiesTable(skillMd: string): AgentMenuItem[] {
+  const lines = skillMd.split(/\r?\n/);
+  const capIdx = lines.findIndex((l) => /^##\s+capabilities/i.test(l.trim()));
+  if (capIdx === -1) return [];
+  const out: AgentMenuItem[] = [];
+  for (let i = capIdx + 1; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (l.startsWith("##")) break; // next section
+    if (!l.startsWith("|")) continue;
+    const cols = l.split("|").map((c) => c.trim()).filter(Boolean);
+    if (cols.length < 2) continue;
+    if (/^-+$/.test(cols[0])) continue; // separator row
+    if (/^code$/i.test(cols[0])) continue; // header row
+    const code = cols[0];
+    const description = cols[1];
+    const skill = cols[2] || undefined;
+    if (code && description) out.push({ code, description, skill });
+  }
+  return out;
+}
+
 export function loadAgentMenu(agentSkillId: string) {
   const repoRoot = getRepoRoot();
   const skillsRoot = getBmadSkillsRoot();
   const skills = loadBmadSkills({ skillsRoot, repoRoot });
   const skill = findSkill(skills, agentSkillId);
   if (!skill) throw new Error(`Agent skill not found: ${agentSkillId}`);
+  // 6.x: menu is in the Capabilities table in SKILL.md
+  const skillMd = readIfExists(path.join(skill.absDir, "SKILL.md"));
+  if (skillMd) {
+    const fromMd = parseCapabilitiesTable(skillMd);
+    if (fromMd.length > 0) return fromMd;
+  }
+  // 5.x fallback
   const customizeToml = readIfExists(path.join(skill.absDir, "customize.toml"));
   if (!customizeToml) return [];
   return parseAgentMenu(customizeToml);
@@ -114,10 +144,17 @@ export async function greetAgent(params: {
   userName?: string;
 }) {
   const { agentSkillId, llm, userName } = params;
-  const greeting = `You are the BMAD agent skill ${agentSkillId}. Greet the user warmly${userName ? ` as ${userName}` : ""}. Keep it concise. Then ask what they want to do.`;
+  const repoRoot = getRepoRoot();
+  const skillsRoot = getBmadSkillsRoot();
+  const skills = loadBmadSkills({ skillsRoot, repoRoot });
+  const skill = findSkill(skills, agentSkillId);
+  const skillMd = skill ? readIfExists(path.join(skill.absDir, "SKILL.md")) : null;
+  const system = skillMd
+    ? `${skillMd}\n\nGreet the user warmly${userName ? ` as ${userName}` : ""}. Keep it concise (2-3 sentences). Then present your Capabilities table and ask what they want to do.`
+    : `You are the BMAD agent skill ${agentSkillId}. Greet the user warmly${userName ? ` as ${userName}` : ""}. Keep it concise. Then ask what they want to do.`;
   const r = await llmJson<{ text: string }>({
     config: llm,
-    system: greeting,
+    system,
     user: "Start the session.",
     schemaHint: `{ "text": "string" }`
   });
@@ -285,8 +322,13 @@ export async function advanceSession(params: {
     .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.text}`)
     .join("\n");
 
+  const agentSkill = session.agentSkillId ? findSkill(skills, session.agentSkillId) : null;
+  const agentSkillMd = agentSkill ? readIfExists(path.join(agentSkill.absDir, "SKILL.md")) : null;
+
   const system =
-    (session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +
+    (agentSkillMd
+      ? `${agentSkillMd}\n\n`
+      : session.agentSkillId ? `You are running BMAD agent ${session.agentSkillId}. ` : "") +
     (session.activeSkillId ? `Current BMAD skill: ${session.activeSkillId}. ` : "") +
     `You are operating inside a chat UI. Ask one question at a time. If you need more info, ask a focused question. ` +
     (guided
