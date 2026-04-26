@@ -490,9 +490,12 @@ export default function HomePage() {
       fetchBmadDebug((j.session as BmadSession).id).catch(() => {});
     }
     setBmadBusy(false);
-    setBmadStatus("Ready");
-    setStage("Idle");
-    setStageDetail("");
+    setStage("Done");
+    setStageDetail("Response received");
+    setTimeout(() => {
+      setStage("Idle");
+      setStageDetail("");
+    }, 2000);
   }
 
   async function fetchBmadDebug(sessionId: string) {
@@ -1126,8 +1129,9 @@ export default function HomePage() {
                           boxShadow: bmadBusy ? "0 0 0 3px rgba(245,158,11,0.3)" : undefined,
                           animation: bmadBusy ? "pulse 1.2s ease-in-out infinite" : undefined
                         }} />
-                        <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: stage === "Error" ? "#ef4444" : bmadBusy ? "#f59e0b" : "inherit" }}>
+                        <span style={{ fontFamily: "var(--mono)", fontWeight: 700, color: stage === "Error" ? "#ef4444" : bmadBusy ? "#f59e0b" : stage === "Done" ? "#22c55e" : "inherit" }}>
                           {stage === "Error" ? (stageDetail || "Error")
+                            : stage === "Done" ? "Response received"
                             : stage === "Agent thinking" ? "Agent thinking…"
                             : stage === "Starting agent" ? "Starting agent…"
                             : stage === "Authenticating runtime" ? "Authenticating…"
