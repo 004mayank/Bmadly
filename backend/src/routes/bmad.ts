@@ -398,6 +398,7 @@ bmadRouter.post("/bmad/sessions/message", async (req, res) => {
         method: "POST",
         body: { ...req.body, sessionId: runtimeSessionId }
       });
+      if (j?.session) j.session = { ...j.session, id: session.id, runId: session.runId };
       return res.json(j);
     } catch (e: any) {
       return res.status(502).json({ error: `Runtime proxy failed: ${String(e?.message || e)}` });
