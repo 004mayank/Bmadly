@@ -1,6 +1,69 @@
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
+
+function Inline({ text }: { text: string }): React.ReactElement {
+  const parts: React.ReactNode[] = [];
+  const combinedRe = /(\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|\[([^\]]+)\]\(([^)]+)\))/g;
+  let lastIndex = 0;
+  let match;
+  let key = 0;
+  while ((match = combinedRe.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const full = match[1];
+    if (full.startsWith("**")) parts.push(<strong key={key++}>{match[2]}</strong>);
+    else if (full.startsWith("*")) parts.push(<em key={key++}>{match[3]}</em>);
+    else if (full.startsWith("`")) parts.push(<code key={key++} style={{ background: "rgba(0,0,0,0.35)", padding: "1px 5px", borderRadius: 4, fontFamily: "var(--mono)", fontSize: "0.88em" }}>{match[4]}</code>);
+    else if (full.startsWith("[")) {
+      const linkText = match[5]; const url = match[6];
+      if (url && url !== "#" && (url.startsWith("http") || url.startsWith("/")))
+        parts.push(<a key={key++} href={url} target="_blank" rel="noreferrer" style={{ color: "var(--accent)", textDecoration: "underline" }}>{linkText}</a>);
+      else parts.push(<span key={key++}>{linkText}</span>);
+    }
+    lastIndex = match.index + full.length;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return <>{parts}</>;
+}
+
+function SimpleMarkdown({ text }: { text: string }) {
+  const blocks: { type: string; content: string; level?: number }[] = [];
+  const lines = text.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (line.startsWith("```")) {
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
+      blocks.push({ type: "code", content: codeLines.join("\n") });
+    } else if (/^#{1,3} /.test(line)) {
+      const level = (line.match(/^(#{1,3}) /)?.[1] ?? "").length;
+      blocks.push({ type: "heading", content: line.replace(/^#{1,3} /, ""), level });
+    } else if (/^[-*] /.test(line)) {
+      blocks.push({ type: "li", content: line.replace(/^[-*] /, "") });
+    } else if (line.trim() === "---") {
+      blocks.push({ type: "hr", content: "" });
+    } else if (line.trim() === "") {
+      blocks.push({ type: "br", content: "" });
+    } else {
+      blocks.push({ type: "p", content: line });
+    }
+    i++;
+  }
+  return (
+    <div style={{ lineHeight: 1.6, fontSize: 13 }}>
+      {blocks.map((b, idx) => {
+        if (b.type === "code") return <pre key={idx} style={{ background: "rgba(0,0,0,0.4)", padding: "10px", borderRadius: 8, fontSize: 11, overflowX: "auto", margin: "6px 0", fontFamily: "var(--mono)", whiteSpace: "pre-wrap" }}>{b.content}</pre>;
+        if (b.type === "hr") return <hr key={idx} style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.1)", margin: "8px 0" }} />;
+        if (b.type === "br") return <div key={idx} style={{ height: 4 }} />;
+        if (b.type === "heading") return <div key={idx} style={{ fontWeight: 800, fontSize: b.level === 1 ? 16 : b.level === 2 ? 15 : 14, marginTop: b.level === 1 ? 14 : 10, marginBottom: 4 }}><Inline text={b.content} /></div>;
+        if (b.type === "li") return <div key={idx} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginTop: 2 }}><span style={{ color: "var(--accent)", flexShrink: 0, lineHeight: 1.6 }}>•</span><span><Inline text={b.content} /></span></div>;
+        return <div key={idx}><Inline text={b.content} /></div>;
+      })}
+    </div>
+  );
+}
 import { API_BASE_URL, PROVIDERS } from "../lib/config";
 
 type ProviderId = (typeof PROVIDERS)[number]["id"];
@@ -1183,12 +1246,41 @@ export default function HomePage() {
                       </div>
                     ) : null}
 
-                    <div className="monoBox" style={{ minHeight: 520, maxHeight: 640, overflow: "auto" }} ref={bmadChatRef as any}>
-                      {(bmadSession?.messages?.length
-                        ? bmadSession.messages
-                            .map((m) => `${m.role === "user" ? "USER" : "ASSISTANT"}  ${new Date(m.ts).toLocaleTimeString()}\n${m.text}`)
-                            .join("\n\n")
-                        : "(start an agent to begin chatting)")}
+                    <div style={{ minHeight: 520, maxHeight: 640, overflow: "auto", background: "rgba(2,6,23,0.48)", border: "1px solid var(--border)", borderRadius: 18, padding: 14, display: "flex", flexDirection: "column", gap: 12 }} ref={bmadChatRef as any}>
+                      {bmadSession?.messages?.length ? bmadSession.messages.map((m, idx) => (
+                        <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: m.role === "user" ? "flex-end" : "flex-start" }}>
+                          <div style={{ fontSize: 10, color: "rgba(167,176,194,0.6)", marginBottom: 4, fontFamily: "var(--mono)" }}>
+                            {m.role === "user" ? "YOU" : "AGENT"} · {new Date(m.ts).toLocaleTimeString()}
+                          </div>
+                          <div style={{
+                            maxWidth: "88%",
+                            padding: "10px 14px",
+                            borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                            background: m.role === "user" ? "rgba(59,130,246,0.15)" : "rgba(255,255,255,0.04)",
+                            border: m.role === "user" ? "1px solid rgba(59,130,246,0.3)" : "1px solid rgba(255,255,255,0.08)",
+                            color: "var(--text)"
+                          }}>
+                            {m.role === "user" ? <span style={{ fontSize: 13 }}>{m.text}</span> : <SimpleMarkdown text={m.text} />}
+                          </div>
+                          {m.role === "assistant" && bmadSession.artifacts?.length > 0 && idx === bmadSession.messages.length - 1 && (
+                            <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                              {bmadSession.artifacts.map((art) => (
+                                <button key={art.id} type="button" onClick={() => {
+                                  const blob = new Blob([art.content], { type: "text/markdown;charset=utf-8" });
+                                  const url = URL.createObjectURL(blob);
+                                  const a = document.createElement("a");
+                                  a.href = url; a.download = `${art.title || art.type || "document"}.md`;
+                                  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+                                }} style={{ fontSize: 11, padding: "5px 10px", borderRadius: 8, background: "rgba(125,211,252,0.1)", border: "1px solid rgba(125,211,252,0.3)", color: "var(--accent)", cursor: "pointer", fontWeight: 700 }}>
+                                  ↓ {art.title || art.type || "Download"}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )) : (
+                        <div style={{ color: "rgba(167,176,194,0.5)", fontSize: 13, margin: "auto", textAlign: "center" }}>(start an agent to begin chatting)</div>
+                      )}
                     </div>
 
                     <div className="row" style={{ marginTop: 12, gap: 10, alignItems: "flex-end" }}>
