@@ -1155,32 +1155,20 @@ export default function HomePage() {
                         : "(start an agent to begin chatting)")}
                     </div>
 
-                    {bmadMenu?.length ? (
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
-                        {bmadMenu.slice(0, 14).map((it) => (
-                          <button
-                            key={it.code}
-                            className="btnSecondary"
-                            type="button"
-                            onClick={() => {
-                              if (it.skill) selectBmadSkill(it.skill).catch(() => {});
-                              if (it.prompt) sendBmadChat(it.prompt).catch(() => {});
-                            }}
-                            disabled={!bmadSession || bmadBusy}
-                            title={it.description ? String(it.description).split("\n")[0] : it.code}
-                          >
-                            {it.code}
-                          </button>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="row" style={{ marginTop: 12, gap: 10 }}>
-                      <input
+                    <div className="row" style={{ marginTop: 12, gap: 10, alignItems: "flex-end" }}>
+                      <textarea
                         className="input"
+                        rows={2}
+                        style={{ resize: "none", lineHeight: 1.5, flex: 1 }}
                         value={bmadChatInput}
                         onChange={(e) => setBmadChatInput(e.target.value)}
-                        placeholder="Direct agent command…"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && !e.shiftKey) {
+                            e.preventDefault();
+                            sendBmadChat().catch((err) => setBmadStatus(err?.message || "Failed"));
+                          }
+                        }}
+                        placeholder="Direct agent command… (Enter to send, Shift+Enter for new line)"
                         disabled={!bmadSession || bmadBusy}
                       />
                       <button className="btnRun" type="button" onClick={() => sendBmadChat().catch((e) => setBmadStatus(e?.message || "Failed"))} disabled={!bmadSession || bmadBusy}>
